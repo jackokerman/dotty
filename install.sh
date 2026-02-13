@@ -44,9 +44,10 @@ else
     git clone "$DOTTY_REPO" "$DOTTY_DIR" || die "Failed to clone dotty"
 fi
 
-# Set up bin directory with symlink
+# Set up bin directory with symlinks
 mkdir -p "$DOTTY_DIR/bin"
 ln -sf "$DOTTY_DIR/dotty" "$DOTTY_DIR/bin/dotty"
+ln -sfn "$DOTTY_DIR/lib" "$DOTTY_DIR/bin/lib"
 
 # Ensure directories exist
 mkdir -p "$DOTTY_DIR/repos" "$DOTTY_DIR/backups"
