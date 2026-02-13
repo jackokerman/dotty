@@ -1,0 +1,56 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project overview
+
+Dotty is a bash dotfiles manager with overlay semantics. It manages chains of dotfiles repositories where later repos override earlier ones, with support for environment-specific overlays, directory merging, and git-based dependency resolution.
+
+The entire tool is a single bash script (`dotty`, ~830 lines) plus an installer (`install.sh`). There is no build system, no external dependencies, and no test framework.
+
+## Architecture
+
+The `dotty` script is structured as a monolithic bash program with procedural sections:
+
+1. **Logging** (color-coded output helpers: `title`, `info`, `success`, `warning`, `die`)
+2. **Registry** (`registry_*` functions manage a flat `name=path` file at `~/.dotty/registry`)
+3. **Config reading** (sources `dotty.conf` from each repo)
+4. **Chain resolution** (recursive dependency resolution with cycle detection via `resolve_chain`)
+5. **Environment detection** (evaluates `DOTTY_ENV_DETECT` from first repo that defines it)
+6. **Symlink management** (`create_symlinks_for`, `_link_item`, `_explode_dir_symlink` handle recursive directory merging)
+7. **Commands** (`cmd_install`, `cmd_update`, `cmd_add`, `cmd_link`, `cmd_status`, etc.)
+8. **Main dispatch** (entry point routes to command functions)
+
+**Key flow (`install`):** resolve source → resolve dependency chain → register all repos → for each repo: pull, symlink `home/`, apply environment overlay, run `dotty-install.sh` hook.
+
+**Directory merging:** when linking directories, dotty recurses into them and symlinks individual files rather than replacing the whole directory. If a directory symlink already points elsewhere, it "explodes" it into a real directory with child symlinks to preserve both sources.
+
+## Bash conventions
+
+- `set -euo pipefail` at the top
+- Private functions prefixed with `_` (e.g., `_link_item`, `_resolving`)
+- `cmd_` prefix for command implementations
+- `registry_` prefix for registry operations
+- Global arrays for chain state (`CHAIN_NAMES`, `CHAIN_PATHS`, `_RESOLVING`)
+- Cross-platform `sed` usage (handles both GNU and BSD)
+- Shellcheck directives where needed (`# shellcheck disable=SC1090`)
+
+## Runtime state
+
+Dotty stores state in `~/.dotty/`:
+- `registry` — flat file of `name=path` lines
+- `repos/` — auto-cloned dependency repos
+- `backups/` — files replaced by symlinks
+- `bin/dotty` — symlink to main script
+
+## Repo configuration
+
+Each managed dotfiles repo has a `dotty.conf`:
+```bash
+DOTTY_NAME="my-dotfiles"
+DOTTY_EXTENDS=("https://github.com/user/base-dotfiles.git")
+DOTTY_ENVIRONMENTS=("laptop" "remote")
+DOTTY_ENV_DETECT='[[ -d /opt/stripe ]] && echo "laptop"'
+```
+
+Files in `repo/home/` are symlinked to `$HOME`. Environment overlays live in `repo/<env>/home/`.
