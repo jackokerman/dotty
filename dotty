@@ -143,6 +143,36 @@ resolve_chain() {
     CHAIN_PATHS+=("$repo_dir")
 }
 
+# Resolve the full chain from the leaf repo (the one that produces the longest chain).
+# Sets CHAIN_NAMES and CHAIN_PATHS globals.
+resolve_chain_from_leaf() {
+    registry_init
+
+    local -a all_paths=()
+    while IFS='=' read -r name rpath; do
+        [[ -n "$name" && -d "$rpath" ]] && all_paths+=("$rpath")
+    done < "$DOTTY_REGISTRY"
+
+    [[ ${#all_paths[@]} -gt 0 ]] || die "No repos registered. Run 'dotty install' first."
+
+    local best_len=0
+    local -a best_names=() best_paths=()
+    for rpath in "${all_paths[@]}"; do
+        [[ -f "$rpath/dotty.conf" ]] || continue
+        CHAIN_NAMES=()
+        CHAIN_PATHS=()
+        _RESOLVING=()
+        resolve_chain "$rpath" 2>/dev/null || true
+        if [[ ${#CHAIN_NAMES[@]} -gt $best_len ]]; then
+            best_len=${#CHAIN_NAMES[@]}
+            best_names=("${CHAIN_NAMES[@]}")
+            best_paths=("${CHAIN_PATHS[@]}")
+        fi
+    done
+    CHAIN_NAMES=("${best_names[@]}")
+    CHAIN_PATHS=("${best_paths[@]}")
+}
+
 # Given a git URL or local path, return the local path (cloning if needed).
 ensure_repo() {
     local source="$1"
@@ -293,6 +323,67 @@ create_symlink() {
     fi
 }
 
+# Explode a directory symlink into a real directory with symlinks to the
+# original contents. This prevents merges from writing into other repos.
+_explode_dir_symlink() {
+    local target_item="$1"
+    local resolved
+    resolved="$(readlink "$target_item")"
+
+    # Make resolved path absolute if relative
+    if [[ "$resolved" != /* ]]; then
+        resolved="$(cd "$(dirname "$target_item")" && cd "$(dirname "$resolved")" && pwd)/$(basename "$resolved")"
+    fi
+
+    local tmpdir="${target_item}.dotty_tmp"
+    mkdir -p "$tmpdir"
+
+    # Symlink each item from the original directory
+    local child
+    for child in "$resolved"/* "$resolved"/.*; do
+        [[ -e "$child" ]] || continue
+        local cname
+        cname="$(basename "$child")"
+        [[ "$cname" == "." || "$cname" == ".." ]] && continue
+        ln -s "$child" "$tmpdir/$cname" 2>/dev/null || true
+    done
+
+    rm "$target_item"
+    mv "$tmpdir" "$target_item"
+}
+
+# Link a single item (file or directory) to target_item.
+_link_item() {
+    local item="$1"
+    local target_item="$2"
+
+    if [[ -d "$item" ]]; then
+        if [[ -L "$target_item" ]]; then
+            local current
+            current="$(readlink "$target_item")"
+            if [[ "$current" == "$item" ]]; then
+                info "~${target_item#"$HOME"} already linked... Skipping."
+            elif [[ -d "$target_item" ]]; then
+                # Symlink points to a different directory — explode into a real
+                # directory so we merge without polluting the other repo.
+                _explode_dir_symlink "$target_item"
+                create_symlinks_from_dir "$item" "$target_item"
+            else
+                info "Updating symlink: ~${target_item#"$HOME"}"
+                rm "$target_item"
+                create_symlink "$item" "$target_item"
+            fi
+        elif [[ -d "$target_item" ]]; then
+            # Real directory exists — recurse to merge contents
+            create_symlinks_from_dir "$item" "$target_item"
+        else
+            create_symlink "$item" "$target_item"
+        fi
+    else
+        create_symlink "$item" "$target_item"
+    fi
+}
+
 # Recursively symlink contents of source_dir into target_dir.
 # Directories are merged (recursed into), files are symlinked.
 create_symlinks_from_dir() {
@@ -314,26 +405,7 @@ create_symlinks_from_dir() {
 
         local target_item="$target_dir/$name"
 
-        if [[ -d "$item" ]]; then
-            if [[ -L "$target_item" ]]; then
-                local current
-                current="$(readlink "$target_item")"
-                if [[ "$current" == "$item" ]]; then
-                    info "~${target_item#"$HOME"} already linked... Skipping."
-                else
-                    info "Updating symlink: ~${target_item#"$HOME"}"
-                    rm "$target_item"
-                    create_symlink "$item" "$target_item"
-                fi
-            elif [[ -d "$target_item" ]]; then
-                # Real directory exists — recurse to merge contents
-                create_symlinks_from_dir "$item" "$target_item"
-            else
-                create_symlink "$item" "$target_item"
-            fi
-        else
-            create_symlink "$item" "$target_item"
-        fi
+        _link_item "$item" "$target_item"
     done
 
     # Also handle hidden files (dotfiles within home/)
@@ -345,26 +417,7 @@ create_symlinks_from_dir() {
         should_exclude "$name" && continue
 
         local target_item="$target_dir/$name"
-
-        if [[ -d "$item" ]]; then
-            if [[ -L "$target_item" ]]; then
-                local current
-                current="$(readlink "$target_item")"
-                if [[ "$current" == "$item" ]]; then
-                    info "~${target_item#"$HOME"} already linked... Skipping."
-                else
-                    info "Updating symlink: ~${target_item#"$HOME"}"
-                    rm "$target_item"
-                    create_symlink "$item" "$target_item"
-                fi
-            elif [[ -d "$target_item" ]]; then
-                create_symlinks_from_dir "$item" "$target_item"
-            else
-                create_symlink "$item" "$target_item"
-            fi
-        else
-            create_symlink "$item" "$target_item"
-        fi
+        _link_item "$item" "$target_item"
     done
 }
 
@@ -493,52 +546,11 @@ cmd_update() {
 
         pull_if_clean "$path"
 
-        # Still need to resolve and run the full chain since parent
-        # changes could affect children
-        local leaf_path=""
-        local leaf_name=""
-        # Find a leaf repo (one that extends this target)
-        while IFS='=' read -r name rpath; do
-            [[ -n "$name" ]] || continue
-            if [[ -f "$rpath/dotty.conf" ]]; then
-                local extends_names
-                extends_names="$(DOTTY_EXTENDS=(); source "$rpath/dotty.conf"; echo "${DOTTY_EXTENDS[*]:-}")"
-                if [[ -n "$extends_names" ]]; then
-                    leaf_path="$rpath"
-                    leaf_name="$name"
-                fi
-            fi
-        done < "$DOTTY_REGISTRY"
-
-        # If we found a leaf, resolve from there; otherwise just process the target
-        if [[ -n "$leaf_path" ]]; then
-            CHAIN_NAMES=()
-            CHAIN_PATHS=()
-            _RESOLVING=()
-            resolve_chain "$leaf_path"
-            run_chain "false"
-        else
-            CHAIN_NAMES=()
-            CHAIN_PATHS=()
-            _RESOLVING=()
-            resolve_chain "$path"
-            run_chain "false"
-        fi
+        # Resolve full chain from the leaf repo
+        resolve_chain_from_leaf
+        run_chain "false"
     else
-        # Update all: find a leaf repo to resolve the full chain from
-        local leaf_path=""
-        while IFS='=' read -r name rpath; do
-            [[ -n "$name" ]] || continue
-            [[ -d "$rpath" ]] || continue
-            leaf_path="$rpath"
-        done < "$DOTTY_REGISTRY"
-
-        [[ -n "$leaf_path" ]] || die "No repos registered. Run 'dotty install' first."
-
-        CHAIN_NAMES=()
-        CHAIN_PATHS=()
-        _RESOLVING=()
-        resolve_chain "$leaf_path"
+        resolve_chain_from_leaf
         run_chain "true"
     fi
 
@@ -561,20 +573,7 @@ cmd_link() {
         _RESOLVING=()
         resolve_chain "$path"
     else
-        # Find leaf and resolve full chain
-        local leaf_path=""
-        while IFS='=' read -r name rpath; do
-            [[ -n "$name" ]] || continue
-            [[ -d "$rpath" ]] || continue
-            leaf_path="$rpath"
-        done < "$DOTTY_REGISTRY"
-
-        [[ -n "$leaf_path" ]] || die "No repos registered. Run 'dotty install' first."
-
-        CHAIN_NAMES=()
-        CHAIN_PATHS=()
-        _RESOLVING=()
-        resolve_chain "$leaf_path"
+        resolve_chain_from_leaf
     fi
 
     local env
@@ -656,6 +655,7 @@ cmd_add() {
 
     # Determine destination within repo
     local rel_path="${abs_file#"$HOME"/}"
+    [[ "$rel_path" != "$abs_file" ]] || die "File must be under \$HOME: $abs_file"
     local dest="$repo_path/home/$rel_path"
 
     mkdir -p "$(dirname "$dest")"
@@ -688,14 +688,7 @@ cmd_status() {
         return 0
     fi
 
-    # Resolve chain from the last registered repo (leaf)
-    local last_path="${repos[-1]#*=}"
-    if [[ -d "$last_path" && -f "$last_path/dotty.conf" ]]; then
-        CHAIN_NAMES=()
-        CHAIN_PATHS=()
-        _RESOLVING=()
-        resolve_chain "$last_path" 2>/dev/null || true
-    fi
+    resolve_chain_from_leaf
 
     # Show chain
     if [[ ${#CHAIN_NAMES[@]} -gt 0 ]]; then
