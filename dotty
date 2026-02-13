@@ -16,6 +16,9 @@ DOTTY_DIR="${DOTTY_DIR:-$HOME/.dotty}"
 DOTTY_REGISTRY="$DOTTY_DIR/registry"
 DOTTY_REPOS_DIR="$DOTTY_DIR/repos"
 DOTTY_BACKUPS_DIR="$DOTTY_DIR/backups"
+DOTTY_VERBOSE="${DOTTY_VERBOSE:-false}"
+_SKIP_COUNT=0
+_LINK_DEPTH=0
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -300,7 +303,10 @@ create_symlink() {
         local current
         current="$(readlink "$target")"
         if [[ "$current" == "$source" ]]; then
-            info "~${target#"$HOME"} already linked... Skipping."
+            _SKIP_COUNT=$((_SKIP_COUNT + 1))
+            if [[ "$DOTTY_VERBOSE" == "true" ]]; then
+                info "~${target#"$HOME"} already linked... Skipping."
+            fi
             return 0
         else
             info "Updating symlink: ~${target#"$HOME"}"
@@ -362,7 +368,10 @@ _link_item() {
             local current
             current="$(readlink "$target_item")"
             if [[ "$current" == "$item" ]]; then
-                info "~${target_item#"$HOME"} already linked... Skipping."
+                _SKIP_COUNT=$((_SKIP_COUNT + 1))
+                if [[ "$DOTTY_VERBOSE" == "true" ]]; then
+                    info "~${target_item#"$HOME"} already linked... Skipping."
+                fi
             elif [[ -d "$target_item" ]]; then
                 # Symlink points to a different directory — explode into a real
                 # directory so we merge without polluting the other repo.
@@ -392,6 +401,12 @@ create_symlinks_from_dir() {
 
     [[ -d "$source_dir" ]] || return 0
 
+    _LINK_DEPTH=$((_LINK_DEPTH + 1))
+    # Reset skip counter at the top-level call
+    if [[ $_LINK_DEPTH -eq 1 ]]; then
+        _SKIP_COUNT=0
+    fi
+
     mkdir -p "$target_dir"
 
     local item
@@ -419,6 +434,13 @@ create_symlinks_from_dir() {
         local target_item="$target_dir/$name"
         _link_item "$item" "$target_item"
     done
+
+    _LINK_DEPTH=$((_LINK_DEPTH - 1))
+    # Print summary when returning to top level
+    if [[ $_LINK_DEPTH -eq 0 && $_SKIP_COUNT -gt 0 ]]; then
+        info "$_SKIP_COUNT files already linked"
+        _SKIP_COUNT=0
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -472,6 +494,7 @@ process_repo() {
                 export DOTTY_REPO_DIR="$repo_dir"
                 export DOTTY_ENV="${env:-}"
                 export DOTTY_COMMAND="${command:-}"
+                export DOTTY_VERBOSE
                 cd "$repo_dir"
                 ./dotty-run.sh
             ) || warning "dotty-run.sh failed in $name (exit $?)"
@@ -792,7 +815,7 @@ cmd_help() {
     cat <<'EOF'
 dotty - a dotfiles manager with overlay semantics
 
-Usage: dotty <command> [args]
+Usage: dotty [-v] <command> [args]
 
 Commands:
   install [url-or-path]   Resolve chain, clone deps, link files, run dotty-run.sh
@@ -805,10 +828,14 @@ Commands:
   help                    Show this help
   version                 Show version
 
+Options:
+  -v, --verbose    Show per-file skip messages (default: summary only)
+
 Hook environment:
   DOTTY_REPO_DIR   Absolute path to the repo being processed
   DOTTY_ENV        Detected environment (empty if none)
   DOTTY_COMMAND    Command that invoked the hook (install, update)
+  DOTTY_VERBOSE    "true" when -v/--verbose is set
 
 General:
   DOTTY_DIR        Base directory for dotty state (default: ~/.dotty)
@@ -824,6 +851,17 @@ cmd_version() {
 # ---------------------------------------------------------------------------
 
 main() {
+    # Extract -v/--verbose before command dispatch
+    local args=()
+    for arg in "$@"; do
+        case "$arg" in
+            -v|--verbose) DOTTY_VERBOSE=true ;;
+            *) args+=("$arg") ;;
+        esac
+    done
+    set -- "${args[@]}"
+    export DOTTY_VERBOSE
+
     local cmd="${1:-help}"
     shift || true
 
