@@ -56,38 +56,13 @@ if [[ -f "$DOTTY_DIR/completions/_dotty" ]]; then
     info "Zsh completions available"
 fi
 
-# Add to PATH in shell rc files
-add_to_rc() {
-    local rc="$1"
-    local line='export PATH="$HOME/.dotty/bin:$PATH"'
-    if [[ -f "$rc" ]] && grep -qF '.dotty/bin' "$rc"; then
-        return 0
-    fi
-    if [[ -f "$rc" ]]; then
-        echo "" >> "$rc"
-        echo "# dotty" >> "$rc"
-        echo "$line" >> "$rc"
-        info "Added dotty to PATH in $(basename "$rc")"
-    fi
-}
-
-# Add fpath for zsh completions
-add_fpath() {
-    local rc="$1"
-    local line='fpath=("$HOME/.dotty/completions" $fpath)'
-    if [[ -f "$rc" ]] && grep -qF '.dotty/completions' "$rc"; then
-        return 0
-    fi
-    if [[ -f "$rc" ]]; then
-        # Add before any compinit call if possible, otherwise append
-        echo "$line" >> "$rc"
-        info "Added dotty completions to fpath in $(basename "$rc")"
-    fi
-}
-
-add_to_rc "$HOME/.zshrc"
-add_to_rc "$HOME/.bashrc"
-add_fpath "$HOME/.zshrc"
+# Add dotty to PATH in .bashrc (zsh users: dotfiles handle PATH and completions)
+if [[ -f "$HOME/.bashrc" ]] && ! grep -qF '.dotty/bin' "$HOME/.bashrc"; then
+    echo "" >> "$HOME/.bashrc"
+    echo "# dotty" >> "$HOME/.bashrc"
+    echo 'export PATH="$HOME/.dotty/bin:$PATH"' >> "$HOME/.bashrc"
+    info "Added dotty to PATH in .bashrc"
+fi
 
 echo ""
 success "dotty installed successfully!"
