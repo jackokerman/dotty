@@ -444,6 +444,7 @@ pull_if_clean() {
 process_repo() {
     local repo_dir="$1"
     local env="${2:-}"
+    local command="${3:-}"
 
     read_config "$repo_dir"
     local name="$DOTTY_NAME"
@@ -462,23 +463,28 @@ process_repo() {
         create_symlinks_from_dir "$repo_dir/$env/home" "$HOME"
     fi
 
-    # Run install hook (non-fatal so later repos still process)
-    if [[ -x "$repo_dir/dotty-install.sh" ]]; then
-        info "Running dotty-install.sh"
-        (
-            export DOTTY_REPO_DIR="$repo_dir"
-            export DOTTY_ENV="${env:-}"
-            cd "$repo_dir"
-            ./dotty-install.sh
-        ) || warning "dotty-install.sh failed in $name (exit $?)"
-    elif [[ -f "$repo_dir/dotty-install.sh" ]]; then
-        warning "dotty-install.sh exists but is not executable in $name"
+    # Run hook (non-fatal so later repos still process).
+    # Hooks are skipped during "link" (symlink-only mode).
+    if [[ "$command" != "link" ]]; then
+        if [[ -x "$repo_dir/dotty-run.sh" ]]; then
+            info "Running dotty-run.sh"
+            (
+                export DOTTY_REPO_DIR="$repo_dir"
+                export DOTTY_ENV="${env:-}"
+                export DOTTY_COMMAND="${command:-}"
+                cd "$repo_dir"
+                ./dotty-run.sh
+            ) || warning "dotty-run.sh failed in $name (exit $?)"
+        elif [[ -f "$repo_dir/dotty-run.sh" ]]; then
+            warning "dotty-run.sh exists but is not executable in $name"
+        fi
     fi
 }
 
 # Full install/update cycle for the resolved chain.
 run_chain() {
     local pull="${1:-true}"
+    local command="${2:-}"
     local env
     env="$(detect_environment)"
 
@@ -500,7 +506,7 @@ run_chain() {
             pull_if_clean "$dir"
         fi
 
-        process_repo "$dir" "$env"
+        process_repo "$dir" "$env" "$command"
     done
 }
 
@@ -528,7 +534,7 @@ cmd_install() {
     _RESOLVING=()
     resolve_chain "$repo_dir"
 
-    run_chain "true"
+    run_chain "true" "install"
 
     echo ""
     success "Install complete!"
@@ -551,10 +557,10 @@ cmd_update() {
 
         # Resolve full chain from the leaf repo
         resolve_chain_from_leaf
-        run_chain "false"
+        run_chain "false" "update"
     else
         resolve_chain_from_leaf
-        run_chain "true"
+        run_chain "true" "update"
     fi
 
     echo ""
@@ -586,7 +592,7 @@ cmd_link() {
     local i
     for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
         local dir="${CHAIN_PATHS[$i]}"
-        process_repo "$dir" "$env"
+        process_repo "$dir" "$env" "link"
     done
 
     echo ""
@@ -784,8 +790,8 @@ dotty - a dotfiles manager with overlay semantics
 Usage: dotty <command> [args]
 
 Commands:
-  install <url-or-path>   Resolve chain, clone deps, link files, run hooks
-  update [name]           Pull all repos (or one), re-link, re-run hooks
+  install <url-or-path>   Resolve chain, clone deps, link files, run dotty-run.sh
+  update [name]           Pull all repos (or one), re-link, re-run dotty-run.sh
   add <file> [--repo X]   Move a dotfile into a repo and symlink it back
   link [name]             Re-create symlinks only (skip pull and hooks)
   status                  Show repos, chain order, and detected environment
@@ -794,8 +800,13 @@ Commands:
   help                    Show this help
   version                 Show version
 
-Environment:
-  DOTTY_DIR    Base directory for dotty state (default: ~/.dotty)
+Hook environment:
+  DOTTY_REPO_DIR   Absolute path to the repo being processed
+  DOTTY_ENV        Detected environment (empty if none)
+  DOTTY_COMMAND    Command that invoked the hook (install, update)
+
+General:
+  DOTTY_DIR        Base directory for dotty state (default: ~/.dotty)
 EOF
 }
 

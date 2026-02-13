@@ -21,7 +21,9 @@ The `dotty` script is structured as a monolithic bash program with procedural se
 7. **Commands** (`cmd_install`, `cmd_update`, `cmd_add`, `cmd_link`, `cmd_status`, etc.)
 8. **Main dispatch** (entry point routes to command functions)
 
-**Key flow (`install`):** resolve source → resolve dependency chain → register all repos → for each repo: pull, symlink `home/`, apply environment overlay, run `dotty-install.sh` hook.
+**Key flow (`install`):** resolve source → resolve dependency chain → register all repos → for each repo: pull, symlink `home/`, apply environment overlay, run `dotty-run.sh` hook.
+
+**Hook environment variables:** `DOTTY_REPO_DIR` (repo path), `DOTTY_ENV` (detected environment), `DOTTY_COMMAND` (`install`, `update`, or `link`). Hooks are skipped during `link`.
 
 **Directory merging:** when linking directories, dotty recurses into them and symlinks individual files rather than replacing the whole directory. If a directory symlink already points elsewhere, it "explodes" it into a real directory with child symlinks to preserve both sources.
 
@@ -54,3 +56,7 @@ DOTTY_ENV_DETECT='[[ -d /opt/stripe ]] && echo "laptop"'
 ```
 
 Files in `repo/home/` are symlinked to `$HOME`. Environment overlays live in `repo/<env>/home/`.
+
+## Keeping dotfiles repos in sync
+
+When dotty's hook contract changes (new env vars, renamed hook files, changed behavior), check the user's registered dotfiles repos and update them to match. The registry at `~/.dotty/registry` lists all managed repos.

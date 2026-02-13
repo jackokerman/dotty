@@ -79,7 +79,7 @@ Your repo mirrors the structure of `$HOME`. Everything in `home/` gets symlinked
 ```
 my-dotfiles/
 ├── dotty.conf              # config (required)
-├── dotty-install.sh        # post-link hook (optional, must be executable)
+├── dotty-run.sh            # hook script (optional, must be executable)
 ├── home/                   # symlinked to $HOME
 │   ├── .zshrc              # → ~/.zshrc
 │   ├── .gitconfig          # → ~/.gitconfig
@@ -113,9 +113,9 @@ Running `dotty install ~/work-dotfiles` kicks off the following:
 1. Reads `work-dotfiles/dotty.conf`, sees it extends personal dotfiles
 2. Clones personal dotfiles to `~/.dotty/repos/dotfiles` (if not already registered)
 3. Symlinks `dotfiles/home/` into `$HOME` (base layer)
-4. Runs `dotfiles/dotty-install.sh`
+4. Runs `dotfiles/dotty-run.sh`
 5. Symlinks `work-dotfiles/home/` into `$HOME` (overlay, wins on conflicts)
-6. Runs `work-dotfiles/dotty-install.sh`
+6. Runs `work-dotfiles/dotty-run.sh`
 
 ### Composition patterns
 
@@ -132,10 +132,10 @@ Dotty supports three complementary patterns for managing config across repos. It
 
 This is the right approach for most shell config. Your base `.zshrc` defines the structure and each layer adds to it through well-defined extension points.
 
-**Merge** is for structured data like JSON. Install hooks can use tools like `jq` to combine configs:
+**Merge** is for structured data like JSON. Hooks can use tools like `jq` to combine configs:
 
 ```bash
-# In dotty-install.sh
+# In dotty-run.sh
 jq -s '.[0] * .[1]' "$target/settings.json" "$DOTTY_REPO_DIR/settings.json" > tmp && mv tmp "$target/settings.json"
 ```
 
@@ -212,14 +212,43 @@ Register an already-cloned repo without running install. The name is read from `
 
 Remove a repo from the registry. This doesn't delete the repo or its symlinks.
 
-## Install hooks
+## Hooks
 
-If a repo has an executable `dotty-install.sh`, dotty runs it after creating symlinks. Two environment variables are available:
+If a repo has an executable `dotty-run.sh`, dotty runs it after creating symlinks during `install` and `update` (but not `link`). Three environment variables are available:
 
 - `DOTTY_REPO_DIR` — absolute path to the repo
 - `DOTTY_ENV` — detected environment (empty if none)
+- `DOTTY_COMMAND` — the command that invoked the hook (`install` or `update`)
 
 Hooks run with the repo as the working directory. They're the right place for installing packages (`brew bundle`, `apt install`), merging JSON settings, setting up services, or anything OS-specific.
+
+### Conditional execution
+
+Since hooks run on both `install` and `update`, you can use `DOTTY_COMMAND` to control what runs when. This is useful for one-time setup like macOS system preferences or font installation that you don't want to repeat on every update.
+
+```bash
+#!/usr/bin/env bash
+# dotty-run.sh
+
+# Always run these (idempotent, fast)
+brew bundle --no-lock --file="$DOTTY_REPO_DIR/Brewfile"
+
+# Only on first install
+if [[ "$DOTTY_COMMAND" == "install" ]]; then
+    ./scripts/macos-defaults.sh
+    ./scripts/install-fonts.sh
+fi
+```
+
+For scripts that should only run once ever (even across reinstalls), use a marker file:
+
+```bash
+marker="$HOME/.dotty/.macos-done"
+if [[ ! -f "$marker" ]]; then
+    ./scripts/macos-defaults.sh
+    touch "$marker"
+fi
+```
 
 ## Shell completions
 
@@ -249,7 +278,7 @@ When dotty creates a symlink where a real file already exists, it moves the orig
 
 ## Migrating from a manual install script
 
-If you already have dotfiles with an `install.sh`, you can adopt dotty incrementally. Add a `dotty.conf` to your repo, create a `dotty-install.sh` with your post-link setup logic, and update your `install.sh` to delegate to dotty when it's available:
+If you already have dotfiles with an `install.sh`, you can adopt dotty incrementally. Add a `dotty.conf` to your repo, create a `dotty-run.sh` with your post-link setup logic, and update your `install.sh` to delegate to dotty when it's available:
 
 ```bash
 #!/usr/bin/env bash
