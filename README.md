@@ -217,11 +217,13 @@ Remove a repo from the registry. This doesn't delete the repo or its symlinks.
 
 ## Hooks
 
-If a repo has an executable `dotty-run.sh`, dotty runs it after creating symlinks during `install` and `update` (but not `link`). Three environment variables are available:
+If a repo has an executable `dotty-run.sh`, dotty runs it after creating symlinks during `install` and `update` (but not `link`). These environment variables are available:
 
 - `DOTTY_REPO_DIR` — absolute path to the repo
 - `DOTTY_ENV` — detected environment (empty if none)
 - `DOTTY_COMMAND` — the command that invoked the hook (`install` or `update`)
+- `DOTTY_VERBOSE` — `"true"` when `-v`/`--verbose` is set
+- `DOTTY_LIB` — path to the hook utility library (see [Hook utilities](#hook-utilities))
 
 Hooks run with the repo as the working directory. They're the right place for installing packages (`brew bundle`, `apt install`), merging JSON settings, setting up services, or anything OS-specific.
 
@@ -253,6 +255,38 @@ if [[ ! -f "$marker" ]]; then
 fi
 ```
 
+### Hook utilities
+
+Dotty ships a utility library at `lib/hooks.sh` that hook scripts can source via the `DOTTY_LIB` environment variable. This gives hooks access to the same logging and symlink functions that dotty uses internally, so you don't have to maintain your own copies.
+
+```bash
+#!/usr/bin/env bash
+# dotty-run.sh
+source "$DOTTY_LIB"
+
+title "Setting up my dotfiles"
+info "Installing packages..."
+
+# Create symlinks from a custom directory into $HOME
+create_symlinks_from_dir "$DOTTY_REPO_DIR/extras" "$HOME"
+```
+
+Available functions:
+
+| Function | Description |
+|---|---|
+| `title "msg"` | Purple heading with leading newline |
+| `info "msg"` | Blue info message |
+| `success "msg"` | Green success message |
+| `warning "msg"` | Yellow warning message |
+| `die "msg"` | Red error message, exits with code 1 |
+| `verbose_info "msg"` | Info message that only prints when `DOTTY_VERBOSE` is `"true"` |
+| `should_exclude "name"` | Returns 0 if a filename matches dotty's exclusion list |
+| `create_symlink src dest` | Creates a symlink, handling backups and updates |
+| `create_symlinks_from_dir src_dir dest_dir` | Recursively symlinks directory contents with merging |
+
+The library uses a double-source guard, so sourcing it multiple times is safe.
+
 ## Shell completions
 
 Dotty ships zsh completions in `~/.dotty/completions/`. To use them, add the directory to your `fpath` before `compinit` runs:
@@ -271,6 +305,7 @@ Dotty stores everything in `~/.dotty/`:
 ```
 ~/.dotty/
 ├── bin/dotty           # the script (on PATH)
+├── lib/hooks.sh        # utility library for hook scripts
 ├── registry            # name=path, one per line
 ├── repos/              # auto-cloned repos
 ├── backups/            # backed-up files replaced by symlinks

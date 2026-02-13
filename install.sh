@@ -37,6 +37,8 @@ elif [[ -d "$DOTTY_DIR" ]]; then
     cp -f "$tmp_dir/dotty/dotty" "$DOTTY_DIR/dotty" 2>/dev/null || true
     cp -f "$tmp_dir/dotty/install.sh" "$DOTTY_DIR/install.sh" 2>/dev/null || true
     cp -rf "$tmp_dir/dotty/completions" "$DOTTY_DIR/completions" 2>/dev/null || true
+    mkdir -p "$DOTTY_DIR/lib"
+    cp -rf "$tmp_dir/dotty/lib"/* "$DOTTY_DIR/lib/" 2>/dev/null || true
     rm -rf "$tmp_dir"
 else
     git clone "$DOTTY_REPO" "$DOTTY_DIR" || die "Failed to clone dotty"
