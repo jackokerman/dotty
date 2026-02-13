@@ -1,83 +1,49 @@
 # dotty
 
-A bash dotfiles manager with overlay semantics. Manages a chain of dotfiles repos where later repos override earlier ones.
+Most dotfiles managers assume you can install whatever you want on your machine. But if you've ever set up a work laptop with strict software policies, or tried to share a config between your personal and work machines, you know that's not always the case.
 
-## Quick start
+Dotty is a dotfiles manager written entirely in bash. No Ruby, no Python, no package manager required. If your machine has `bash` and `git`, you can use it. That makes it ideal for locked-down environments where you can't install tools freely, like a corporate laptop or a shared server.
+
+The real power is in how dotty handles multiple repos. You keep your personal dotfiles in one repo and your work-specific overrides in another. Dotty chains them together so that work config overlays on top of personal config, with later repos winning on conflicts. You get a clean separation between "my stuff" and "work stuff" without duplicating anything.
+
+It also supports environment-specific overlays within a single repo, so the same work dotfiles can behave differently on your laptop vs. a remote dev server.
+
+## Getting started
+
+The first thing you need to do is install dotty itself. It's a single script that lives at `~/.dotty/bin/dotty`.
 
 ```bash
-# Install dotty
 curl -fsSL https://raw.githubusercontent.com/jackokerman/dotty/main/install.sh | bash
-
-# Install your dotfiles (clones dependencies automatically)
-dotty install <path-or-url>
 ```
 
-If your dotfiles repo declares parent repos via `DOTTY_EXTENDS`, dotty resolves the full chain, clones anything missing, symlinks everything, and runs install hooks.
+> [!Note]
+>
+> The installer clones the dotty repo to `~/.dotty` and adds `~/.dotty/bin` to your `PATH` via `.bashrc`. If you use zsh, you'll want to add it to your `.zshrc` as well.
 
-## Commands
-
-### `dotty install <url-or-path>`
-
-The main entry point. Resolves the dependency chain, clones missing repos, creates symlinks, and runs install hooks.
+Once installed, point dotty at your dotfiles repo:
 
 ```bash
 dotty install ~/my-dotfiles
-dotty install https://github.com/you/work-dotfiles.git
+dotty install https://github.com/you/dotfiles.git
 ```
 
-### `dotty update [name]`
+If your repo declares dependencies via `DOTTY_EXTENDS`, dotty resolves the full chain, clones anything missing, symlinks everything into `$HOME`, and runs install hooks. One command, fully set up.
 
-Pulls all repos (or a specific one) and re-runs the full symlink + hook cycle.
+## Why dotty?
 
-```bash
-dotty update              # pull and re-link everything
-dotty update dotfiles     # pull just one repo, re-link the full chain
-```
+**Pure bash.** No runtime dependencies beyond `bash` and `git`. Install it anywhere, including machines where you can't run `brew install` or `pip install`.
 
-### `dotty add <file> [--repo <name>]`
+**Multi-repo chains.** Keep personal and work dotfiles in separate repos. Dotty layers them on top of each other, with later repos overriding earlier ones. Your personal `.gitconfig` gets replaced by your work one, but your personal `.zshrc` stays intact.
 
-Tracks a new dotfile by moving it into a repo and creating a symlink back.
+**Environment overlays.** A single repo can have different configs for different machines. Laptop gets macOS helpers, remote server gets Linux-specific config. Dotty detects the environment and applies the right overlay.
 
-```bash
-dotty add ~/.tmux.conf --repo dotfiles
+**Directory merging.** When two repos both contribute to `~/.config/`, dotty doesn't clobber one with the other. It recurses into the directory and symlinks individual items, so both repos can coexist.
 
-# What happens:
-# 1. Moves ~/.tmux.conf → ~/dotfiles/home/.tmux.conf
-# 2. Creates symlink ~/.tmux.conf → ~/dotfiles/home/.tmux.conf
-# 3. Prints reminder to commit the new file
-```
+**Incremental adoption.** You don't have to rewrite your dotfiles to use dotty. Add a `dotty.conf`, and your existing repo works. Machines without dotty keep using your old install script.
 
-If `--repo` is omitted and multiple repos are registered, dotty prompts for which one.
+## Setting up your dotfiles repo
 
-### `dotty link [name]`
-
-Re-creates symlinks without pulling repos or running hooks. Useful when you've manually edited files and want to refresh the links.
-
-### `dotty status`
-
-Shows registered repos, the resolved chain order, detected environment, and git status of each repo.
-
-```
-dotty status
-
-  Chain: dotfiles → work-dotfiles
-  Env:   laptop
-
-  ✓ dotfiles (/home/you/dotfiles) [clean]
-  ● work-dotfiles (/home/you/work-dotfiles) [modified]
-```
-
-### `dotty register <path> [name]`
-
-Register an already-cloned repo without running install. The name is read from `dotty.conf` if not provided.
-
-### `dotty unregister <name>`
-
-Remove a repo from the registry. Does not delete the repo or its symlinks.
-
-## Config file
-
-Each dotfiles repo has a `dotty.conf` at its root:
+Each repo that dotty manages needs a `dotty.conf` at its root:
 
 ```bash
 # Required: unique name, used as registry key
@@ -106,10 +72,12 @@ DOTTY_ENV_DETECT='
 | `DOTTY_ENVIRONMENTS` | bash array | no | Environment names this repo supports |
 | `DOTTY_ENV_DETECT` | string | no | Bash snippet that echoes detected environment |
 
-## Directory conventions
+### Directory layout
+
+Your repo mirrors the structure of `$HOME`. Everything in `home/` gets symlinked into `$HOME`, and environment-specific overlays live in their own directories.
 
 ```
-repo/
+my-dotfiles/
 ├── dotty.conf              # config (required)
 ├── dotty-install.sh        # post-link hook (optional, must be executable)
 ├── home/                   # symlinked to $HOME
@@ -124,34 +92,47 @@ repo/
     └── home/               #   overlaid onto $HOME when env=remote
 ```
 
-Everything in `home/` gets symlinked into `$HOME`. The repo layout mirrors the filesystem layout, so `.config/` lives inside `home/` rather than as a separate directory. Dotty only has one linking root to manage.
+## Multi-repo chains
 
-Directories are merged, not replaced. If both your repo and `$HOME` have a `.config/` directory, dotty recurses into it and symlinks individual items. This lets multiple repos contribute to `~/.config/` without clobbering each other.
+This is the core idea behind dotty. You keep a base layer of personal config and extend it with repo-specific overrides.
 
-## Patterns
+Here's a typical setup with personal and work dotfiles:
 
-Dotty supports three complementary patterns for managing dotfiles across repos. It directly handles the first one; the other two live in your dotfiles.
+```bash
+# personal dotfiles (dotty.conf)
+DOTTY_NAME="dotfiles"
+DOTTY_EXTENDS=()
 
-### Override (dotty handles this)
+# work dotfiles (dotty.conf)
+DOTTY_NAME="work-dotfiles"
+DOTTY_EXTENDS=("https://github.com/you/dotfiles.git")
+```
 
-Later repos in the chain replace symlinks from earlier repos. If both `dotfiles/home/.gitconfig` and `work-dotfiles/home/.gitconfig` exist, the work version wins. This is the overlay behavior.
+Running `dotty install ~/work-dotfiles` kicks off the following:
 
-### Extend (your shell config handles this)
+1. Reads `work-dotfiles/dotty.conf`, sees it extends personal dotfiles
+2. Clones personal dotfiles to `~/.dotty/repos/dotfiles` (if not already registered)
+3. Symlinks `dotfiles/home/` into `$HOME` (base layer)
+4. Runs `dotfiles/dotty-install.sh`
+5. Symlinks `work-dotfiles/home/` into `$HOME` (overlay, wins on conflicts)
+6. Runs `work-dotfiles/dotty-install.sh`
 
-Base configs source `.local` files provided by child repos:
+### Composition patterns
+
+Dotty supports three complementary patterns for managing config across repos. It directly handles the first one; the other two live in your dotfiles.
+
+**Override** is what dotty does natively. Later repos in the chain replace symlinks from earlier repos. If both `dotfiles/home/.gitconfig` and `work-dotfiles/home/.gitconfig` exist, the work version wins.
+
+**Extend** is a convention in your shell config. Base configs source `.local` files that child repos provide:
 
 ```
 ~/.zshrc (from personal) → sources ~/.zshrc.local (from work)
 ~/.gitconfig (from personal) → includes ~/.gitconfig.local (from work)
 ```
 
-Dotty ensures the right files are symlinked so the sourcing chain works, but the composition logic lives in the dotfiles themselves.
+This is the right approach for most shell config. Your base `.zshrc` defines the structure and each layer adds to it through well-defined extension points.
 
-This is the right approach for most shell config. Rather than having dotty merge files, your base `.zshrc` defines the structure and each layer adds to it through well-defined extension points.
-
-### Merge (install hooks handle this)
-
-For structured data like JSON settings files, install hooks can use `jq` to merge configs:
+**Merge** is for structured data like JSON. Install hooks can use tools like `jq` to combine configs:
 
 ```bash
 # In dotty-install.sh
@@ -160,20 +141,76 @@ jq -s '.[0] * .[1]' "$target/settings.json" "$DOTTY_REPO_DIR/settings.json" > tm
 
 ## Environments vs extends
 
-These serve different purposes:
+These serve different purposes and you'll often want both.
 
-**Extends** controls which repos are in the chain. It answers "whose config?" Personal dotfiles vs work dotfiles vs team-specific dotfiles. Each repo can fully override files from repos earlier in the chain.
+**Extends** controls which repos are in the chain. It answers "whose config?" Personal dotfiles vs work dotfiles vs team-specific dotfiles. Each repo can fully override files from earlier in the chain.
 
 **Environments** control machine-specific overlays within a single repo. They answer "which machine?" Your work dotfiles might have a `laptop/` directory with macOS helpers and a `remote/` directory with Linux-specific config.
 
 You need both dimensions independently. A work dotfiles repo (extends personal) might still need laptop vs remote awareness (environments).
 
-In practice, most environment-specific config is delivered through the "extend" pattern (`.zshrc.local` sources `$ENV/zsh/.zshrc`) rather than through dotty's overlay mechanism. Dotty's environment detection is mainly useful for:
+In practice, most environment-specific config is delivered through the extend pattern (`.zshrc.local` sources `$ENV/zsh/.zshrc`) rather than through dotty's overlay mechanism. Dotty's environment detection is mainly useful for exporting `DOTTY_ENV` so install hooks can branch on it, and for overlaying `$env/home/` files when needed.
 
-1. Exporting `DOTTY_ENV` so install hooks can branch on it
-2. Overlaying `$env/home/` files into `$HOME` when needed
+## Commands
 
-Environment-specific directories that contain files meant to be sourced (rather than symlinked) don't need a `home/` subdirectory. They're referenced directly by the `.local` files and dotty doesn't touch them.
+### `dotty install <url-or-path>`
+
+The main entry point. Resolves the dependency chain, clones missing repos, creates symlinks, and runs install hooks.
+
+```bash
+dotty install ~/my-dotfiles
+dotty install https://github.com/you/work-dotfiles.git
+```
+
+### `dotty update [name]`
+
+Pulls all repos (or a specific one) and re-runs the full symlink and hook cycle.
+
+```bash
+dotty update              # pull and re-link everything
+dotty update dotfiles     # pull just one repo, re-link the full chain
+```
+
+### `dotty add <file> [--repo <name>]`
+
+Tracks a new dotfile by moving it into a repo and creating a symlink back.
+
+```bash
+dotty add ~/.tmux.conf --repo dotfiles
+
+# What happens:
+# 1. Moves ~/.tmux.conf → ~/dotfiles/home/.tmux.conf
+# 2. Creates symlink ~/.tmux.conf → ~/dotfiles/home/.tmux.conf
+# 3. Prints reminder to commit the new file
+```
+
+If `--repo` is omitted and multiple repos are registered, dotty prompts you to pick one.
+
+### `dotty link [name]`
+
+Re-creates symlinks without pulling repos or running hooks. Useful when you've manually edited files and want to refresh the links.
+
+### `dotty status`
+
+Shows registered repos, the resolved chain order, detected environment, and git status of each repo.
+
+```
+dotty status
+
+  Chain: dotfiles → work-dotfiles
+  Env:   laptop
+
+  ✓ dotfiles (/home/you/dotfiles) [clean]
+  ● work-dotfiles (/home/you/work-dotfiles) [modified]
+```
+
+### `dotty register <path> [name]`
+
+Register an already-cloned repo without running install. The name is read from `dotty.conf` if not provided.
+
+### `dotty unregister <name>`
+
+Remove a repo from the registry. This doesn't delete the repo or its symlinks.
 
 ## Install hooks
 
@@ -182,16 +219,22 @@ If a repo has an executable `dotty-install.sh`, dotty runs it after creating sym
 - `DOTTY_REPO_DIR` — absolute path to the repo
 - `DOTTY_ENV` — detected environment (empty if none)
 
-Hooks run with the repo as the working directory. They're the right place for:
+Hooks run with the repo as the working directory. They're the right place for installing packages (`brew bundle`, `apt install`), merging JSON settings, setting up services, or anything OS-specific.
 
-- Installing packages (`brew bundle`, `apt install`)
-- Merging JSON settings files
-- Setting up services (systemd units, launchd plists)
-- Anything OS-specific (guard with `[[ "$(uname -s)" == "Darwin" ]]`)
+## Shell completions
+
+Dotty ships zsh completions in `~/.dotty/completions/`. To use them, add the directory to your `fpath` before `compinit` runs:
+
+```zsh
+# In your .zshrc, before compinit:
+fpath=("$HOME/.dotty/completions" $fpath)
+```
+
+Once loaded, completions cover subcommands (`dotty <TAB>`), repo names (`dotty update <TAB>`), file paths (`dotty add <TAB>`), and the `--repo` flag.
 
 ## State
 
-Dotty stores state in `~/.dotty/`:
+Dotty stores everything in `~/.dotty/`:
 
 ```
 ~/.dotty/
@@ -204,36 +247,9 @@ Dotty stores state in `~/.dotty/`:
 
 When dotty creates a symlink where a real file already exists, it moves the original to `~/.dotty/backups/` (preserving the path structure) before linking.
 
-## Multi-repo chain example
+## Migrating from a manual install script
 
-A typical setup with personal and work dotfiles:
-
-```bash
-# personal dotfiles (dotty.conf)
-DOTTY_NAME="dotfiles"
-DOTTY_EXTENDS=()
-
-# work dotfiles (dotty.conf)
-DOTTY_NAME="work-dotfiles"
-DOTTY_EXTENDS=("https://github.com/you/dotfiles.git")
-```
-
-Running `dotty install ~/work-dotfiles`:
-
-1. Reads `work-dotfiles/dotty.conf`, sees it extends personal dotfiles
-2. Clones personal dotfiles to `~/.dotty/repos/dotfiles` (if not already registered)
-3. Symlinks `dotfiles/home/` → `$HOME` (base layer)
-4. Runs `dotfiles/dotty-install.sh`
-5. Symlinks `work-dotfiles/home/` → `$HOME` (overlay, wins on conflicts)
-6. Runs `work-dotfiles/dotty-install.sh`
-
-## Migration from manual install scripts
-
-If you have existing dotfiles with an `install.sh`, you can migrate incrementally:
-
-1. Add `dotty.conf` to your repo (this is additive, doesn't break anything)
-2. Create `dotty-install.sh` with your post-link setup logic
-3. Update `install.sh` to delegate to dotty when available:
+If you already have dotfiles with an `install.sh`, you can adopt dotty incrementally. Add a `dotty.conf` to your repo, create a `dotty-install.sh` with your post-link setup logic, and update your `install.sh` to delegate to dotty when it's available:
 
 ```bash
 #!/usr/bin/env bash
@@ -244,31 +260,7 @@ fi
 # ... existing install logic as fallback ...
 ```
 
-This way, machines without dotty keep working. As you install dotty on each machine, they start using the new path.
-
-## Shell completions
-
-Dotty ships zsh completions in `~/.dotty/completions/`. To use them, add the directory to your `fpath` before `compinit` runs:
-
-```zsh
-# In your .zshrc, before compinit:
-fpath=("$HOME/.dotty/completions" $fpath)
-```
-
-If you use a plugin manager, it probably has a way to add fpath directories. For example, with zfetch:
-
-```zsh
-zfetch fpath "$HOME/.dotty/completions"
-```
-
-The guard is built in: if `~/.dotty/completions` doesn't exist (dotty isn't installed), nothing happens.
-
-Once loaded, completions provide:
-
-- Subcommand completion: `dotty <TAB>`
-- Repo name completion: `dotty update <TAB>` (reads from registry)
-- File completion: `dotty add <TAB>`
-- `--repo` flag completion: `dotty add --repo <TAB>`
+Machines without dotty keep working. As you install dotty on each machine, they start using the new path.
 
 ## Troubleshooting
 
@@ -276,6 +268,6 @@ Once loaded, completions provide:
 
 **Symlink conflicts** — If a real file exists where dotty wants to create a symlink, it backs up the file to `~/.dotty/backups/` and creates the link. Check backups if something goes missing.
 
-**Broken symlinks after moving repos** — Run `dotty link` to recreate all symlinks. If you've moved a repo, re-register it: `dotty register /new/path`.
+**Broken symlinks after moving repos** — Run `dotty link` to recreate all symlinks. If you've moved a repo, re-register it with `dotty register /new/path`.
 
 **Chain resolution fails** — Make sure parent repos are accessible (can be cloned or are already registered). Use `dotty status` to see the current state.
