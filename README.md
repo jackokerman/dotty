@@ -248,7 +248,22 @@ This way, machines without dotty keep working. As you install dotty on each mach
 
 ## Shell completions
 
-Zsh completions are installed to `~/.dotty/completions/`. The installer adds `fpath` automatically. Completions provide:
+Dotty ships zsh completions in `~/.dotty/completions/`. To use them, add the directory to your `fpath` before `compinit` runs:
+
+```zsh
+# In your .zshrc, before compinit:
+fpath=("$HOME/.dotty/completions" $fpath)
+```
+
+If you use a plugin manager, it probably has a way to add fpath directories. For example, with zfetch:
+
+```zsh
+zfetch fpath "$HOME/.dotty/completions"
+```
+
+The guard is built in: if `~/.dotty/completions` doesn't exist (dotty isn't installed), nothing happens.
+
+Once loaded, completions provide:
 
 - Subcommand completion: `dotty <TAB>`
 - Repo name completion: `dotty update <TAB>` (reads from registry)
