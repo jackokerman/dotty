@@ -52,7 +52,7 @@ Each managed dotfiles repo has a `dotty.conf`:
 DOTTY_NAME="my-dotfiles"
 DOTTY_EXTENDS=("https://github.com/user/base-dotfiles.git")
 DOTTY_ENVIRONMENTS=("laptop" "remote")
-DOTTY_ENV_DETECT='[[ -d /opt/stripe ]] && echo "laptop"'
+DOTTY_ENV_DETECT='[[ -n "${SSH_CONNECTION:-}" ]] && echo "remote"'
 ```
 
 Files in `repo/home/` are symlinked to `$HOME`. Environment overlays live in `repo/<env>/home/`.
