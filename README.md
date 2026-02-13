@@ -153,13 +153,16 @@ In practice, most environment-specific config is delivered through the extend pa
 
 ## Commands
 
-### `dotty install <url-or-path>`
+### `dotty install [url-or-path]`
 
-The main entry point. Resolves the dependency chain, clones missing repos, creates symlinks, and runs install hooks.
+The main entry point. Resolves the dependency chain, clones missing repos, creates symlinks, and runs hooks.
+
+With an argument, it sets up a new dotfiles repo (cloning dependencies as needed). Without an argument, it re-runs the full install cycle on the existing registered repos. This is useful when you want to re-trigger one-time setup scripts (like macOS defaults) that are guarded behind `DOTTY_COMMAND == "install"`.
 
 ```bash
-dotty install ~/my-dotfiles
-dotty install https://github.com/you/work-dotfiles.git
+dotty install ~/my-dotfiles                            # first-time setup
+dotty install https://github.com/you/work-dotfiles.git # from a URL
+dotty install                                          # re-run install on existing repos
 ```
 
 ### `dotty update [name]`

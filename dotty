@@ -516,25 +516,30 @@ run_chain() {
 
 cmd_install() {
     local source="${1:-}"
-    [[ -n "$source" ]] || die "Usage: dotty install <url-or-path>"
 
     registry_init
 
-    # Resolve to local path (clone if URL)
-    local repo_dir
-    if [[ -d "$source" ]]; then
-        repo_dir="$(cd "$source" && pwd)"
+    if [[ -z "$source" ]]; then
+        # No argument: re-run install on existing repos
+        resolve_chain_from_leaf
+        run_chain "true" "install"
     else
-        repo_dir="$(ensure_repo "$source")"
+        # Resolve to local path (clone if URL)
+        local repo_dir
+        if [[ -d "$source" ]]; then
+            repo_dir="$(cd "$source" && pwd)"
+        else
+            repo_dir="$(ensure_repo "$source")"
+        fi
+
+        # Resolve full chain
+        CHAIN_NAMES=()
+        CHAIN_PATHS=()
+        _RESOLVING=()
+        resolve_chain "$repo_dir"
+
+        run_chain "true" "install"
     fi
-
-    # Resolve full chain
-    CHAIN_NAMES=()
-    CHAIN_PATHS=()
-    _RESOLVING=()
-    resolve_chain "$repo_dir"
-
-    run_chain "true" "install"
 
     echo ""
     success "Install complete!"
@@ -790,7 +795,7 @@ dotty - a dotfiles manager with overlay semantics
 Usage: dotty <command> [args]
 
 Commands:
-  install <url-or-path>   Resolve chain, clone deps, link files, run dotty-run.sh
+  install [url-or-path]   Resolve chain, clone deps, link files, run dotty-run.sh
   update [name]           Pull all repos (or one), re-link, re-run dotty-run.sh
   add <file> [--repo X]   Move a dotfile into a repo and symlink it back
   link [name]             Re-create symlinks only (skip pull and hooks)
