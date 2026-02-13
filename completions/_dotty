@@ -1,0 +1,58 @@
+#compdef dotty
+
+# Zsh completion for dotty - a dotfiles manager
+
+_dotty_registry_names() {
+    local registry="${DOTTY_DIR:-$HOME/.dotty}/registry"
+    [[ -f "$registry" ]] || return
+    local -a names
+    while IFS='=' read -r name _; do
+        [[ -n "$name" ]] && names+=("$name")
+    done < "$registry"
+    compadd -a names
+}
+
+_dotty() {
+    local -a commands=(
+        'install:Resolve chain, clone deps, link files, run hooks'
+        'update:Pull repos, re-link, re-run hooks'
+        'add:Move a dotfile into a repo and symlink it back'
+        'link:Re-create symlinks only'
+        'status:Show repos, chain, and detected environment'
+        'register:Register an already-cloned repo'
+        'unregister:Remove a repo from the registry'
+        'help:Show help'
+        'version:Show version'
+    )
+
+    if (( CURRENT == 2 )); then
+        _describe -t commands 'dotty command' commands
+        return
+    fi
+
+    case "${words[2]}" in
+        install)
+            _files -/
+            ;;
+        update|link|unregister)
+            _dotty_registry_names
+            ;;
+        add)
+            # Handle --repo flag
+            if [[ "${words[CURRENT-1]}" == "--repo" ]]; then
+                _dotty_registry_names
+            else
+                _arguments \
+                    '--repo[Target repo]:repo name:_dotty_registry_names' \
+                    '*:file:_files'
+            fi
+            ;;
+        register)
+            if (( CURRENT == 3 )); then
+                _files -/
+            fi
+            ;;
+    esac
+}
+
+_dotty "$@"

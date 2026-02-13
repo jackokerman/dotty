@@ -1,0 +1,5 @@
+# dotty state (lives in ~/.dotty at runtime, not in the repo)
+registry
+repos/
+backups/
+bin/

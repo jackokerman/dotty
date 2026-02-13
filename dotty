@@ -1,0 +1,832 @@
+#!/usr/bin/env bash
+#
+# dotty - a dotfiles manager with overlay semantics
+#
+# Manages a chain of dotfiles repos where later repos override earlier ones.
+# Each repo can declare parent repos (via DOTTY_EXTENDS) and environment-specific
+# overlays (via DOTTY_ENVIRONMENTS / DOTTY_ENV_DETECT).
+#
+# Usage: dotty <command> [args]
+# Run 'dotty help' for full command list.
+
+set -euo pipefail
+
+DOTTY_VERSION="0.1.0"
+DOTTY_DIR="${DOTTY_DIR:-$HOME/.dotty}"
+DOTTY_REGISTRY="$DOTTY_DIR/registry"
+DOTTY_REPOS_DIR="$DOTTY_DIR/repos"
+DOTTY_BACKUPS_DIR="$DOTTY_DIR/backups"
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+COLOR_BLUE="\033[34m"
+COLOR_GREEN="\033[32m"
+COLOR_RED="\033[31m"
+COLOR_PURPLE="\033[35m"
+COLOR_YELLOW="\033[33m"
+COLOR_DIM="\033[2m"
+COLOR_NONE="\033[0m"
+
+title()   { echo -e "\n${COLOR_PURPLE}$1${COLOR_NONE}"; }
+info()    { echo -e "${COLOR_BLUE}Info: ${COLOR_NONE}$1"; }
+success() { echo -e "${COLOR_GREEN}$1${COLOR_NONE}"; }
+warning() { echo -e "${COLOR_YELLOW}Warning: ${COLOR_NONE}$1"; }
+die()     { echo -e "${COLOR_RED}Error: ${COLOR_NONE}$1" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Registry helpers
+# ---------------------------------------------------------------------------
+
+registry_init() {
+    mkdir -p "$DOTTY_DIR" "$DOTTY_REPOS_DIR" "$DOTTY_BACKUPS_DIR"
+    touch "$DOTTY_REGISTRY"
+}
+
+# Get the path for a registered repo by name.
+registry_get() {
+    local name="$1"
+    grep -m1 "^${name}=" "$DOTTY_REGISTRY" 2>/dev/null | cut -d= -f2-
+}
+
+# Register a repo name→path mapping. Overwrites if name exists.
+registry_set() {
+    local name="$1"
+    local path="$2"
+
+    if grep -q "^${name}=" "$DOTTY_REGISTRY" 2>/dev/null; then
+        # Update existing entry (portable sed)
+        local tmp="$DOTTY_REGISTRY.tmp"
+        grep -v "^${name}=" "$DOTTY_REGISTRY" > "$tmp" || true
+        echo "${name}=${path}" >> "$tmp"
+        mv "$tmp" "$DOTTY_REGISTRY"
+    else
+        echo "${name}=${path}" >> "$DOTTY_REGISTRY"
+    fi
+}
+
+# Remove a repo from the registry by name.
+registry_remove() {
+    local name="$1"
+    local tmp="$DOTTY_REGISTRY.tmp"
+    grep -v "^${name}=" "$DOTTY_REGISTRY" > "$tmp" 2>/dev/null || true
+    mv "$tmp" "$DOTTY_REGISTRY"
+}
+
+# List all registered names.
+registry_names() {
+    cut -d= -f1 "$DOTTY_REGISTRY" 2>/dev/null
+}
+
+# ---------------------------------------------------------------------------
+# Config reading
+# ---------------------------------------------------------------------------
+
+# Source a repo's dotty.conf and export its variables.
+# Sets: DOTTY_NAME, DOTTY_EXTENDS, DOTTY_ENVIRONMENTS, DOTTY_ENV_DETECT
+read_config() {
+    local repo_dir="$1"
+    local conf="$repo_dir/dotty.conf"
+
+    [[ -f "$conf" ]] || die "No dotty.conf found in $repo_dir"
+
+    # Reset to defaults before sourcing
+    DOTTY_NAME=""
+    DOTTY_EXTENDS=()
+    DOTTY_ENVIRONMENTS=()
+    DOTTY_ENV_DETECT=""
+
+    # shellcheck disable=SC1090
+    source "$conf"
+
+    [[ -n "$DOTTY_NAME" ]] || die "DOTTY_NAME is required in $conf"
+}
+
+# ---------------------------------------------------------------------------
+# Chain resolution
+# ---------------------------------------------------------------------------
+
+# Resolve the full dependency chain for a repo, base-first.
+# Populates the global CHAIN_NAMES and CHAIN_PATHS arrays.
+CHAIN_NAMES=()
+CHAIN_PATHS=()
+_RESOLVING=()
+
+resolve_chain() {
+    local repo_dir
+    repo_dir="$(cd "$1" && pwd)"
+
+    read_config "$repo_dir"
+    local name="$DOTTY_NAME"
+    local -a extends=("${DOTTY_EXTENDS[@]}")
+
+    # Cycle detection
+    for r in "${_RESOLVING[@]}"; do
+        [[ "$r" == "$name" ]] && die "Dependency cycle detected: $name"
+    done
+    _RESOLVING+=("$name")
+
+    # Resolve parents first (so base repos come first in chain)
+    for parent_url in "${extends[@]}"; do
+        local parent_dir
+        parent_dir="$(ensure_repo "$parent_url")"
+        resolve_chain "$parent_dir"
+    done
+
+    # Add self (skip if already in chain, e.g. diamond dependency)
+    for existing in "${CHAIN_NAMES[@]}"; do
+        [[ "$existing" == "$name" ]] && return 0
+    done
+
+    CHAIN_NAMES+=("$name")
+    CHAIN_PATHS+=("$repo_dir")
+}
+
+# Given a git URL or local path, return the local path (cloning if needed).
+ensure_repo() {
+    local source="$1"
+
+    # Local path
+    if [[ -d "$source" ]]; then
+        (cd "$source" && pwd)
+        return 0
+    fi
+
+    # Check registry — the repo name often matches the URL basename
+    local url_basename
+    url_basename="$(basename "$source" .git)"
+    local registered_path
+    registered_path="$(registry_get "$url_basename")"
+    if [[ -n "$registered_path" && -d "$registered_path" && -f "$registered_path/dotty.conf" ]]; then
+        echo "$registered_path"
+        return 0
+    fi
+
+    # Check if already cloned in DOTTY_REPOS_DIR
+    for dir in "$DOTTY_REPOS_DIR"/*/; do
+        [[ -d "$dir" ]] || continue
+        if [[ -f "$dir/dotty.conf" ]]; then
+            local found_name
+            found_name="$(DOTTY_NAME=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); DOTTY_ENV_DETECT=""; source "$dir/dotty.conf"; echo "$DOTTY_NAME")"
+            if [[ -n "$found_name" ]]; then
+                local found_path
+                found_path="$(registry_get "$found_name")"
+                if [[ -n "$found_path" && -d "$found_path" ]]; then
+                    echo "$found_path"
+                    return 0
+                fi
+            fi
+        fi
+    done
+
+    # Clone from URL
+    local clone_name
+    clone_name="$(basename "$source" .git)"
+    local clone_dir="$DOTTY_REPOS_DIR/$clone_name"
+
+    if [[ -d "$clone_dir" ]]; then
+        echo "$clone_dir"
+        return 0
+    fi
+
+    info "Cloning $source..." >&2
+    git clone "$source" "$clone_dir" >&2 || die "Failed to clone $source"
+
+    # Read its name and register
+    if [[ -f "$clone_dir/dotty.conf" ]]; then
+        local cloned_name
+        cloned_name="$(DOTTY_NAME=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); DOTTY_ENV_DETECT=""; source "$clone_dir/dotty.conf"; echo "$DOTTY_NAME")"
+        if [[ -n "$cloned_name" ]]; then
+            registry_set "$cloned_name" "$clone_dir"
+        fi
+    fi
+
+    echo "$clone_dir"
+}
+
+# ---------------------------------------------------------------------------
+# Environment detection
+# ---------------------------------------------------------------------------
+
+# Walk the chain (leaf to root) and eval the first DOTTY_ENV_DETECT found.
+detect_environment() {
+    local i
+    for (( i=${#CHAIN_PATHS[@]}-1; i>=0; i-- )); do
+        local dir="${CHAIN_PATHS[$i]}"
+        local detect=""
+        (
+            DOTTY_ENV_DETECT=""
+            # shellcheck disable=SC1091
+            source "$dir/dotty.conf"
+            echo "$DOTTY_ENV_DETECT"
+        ) | {
+            read -r detect
+            if [[ -n "$detect" ]]; then
+                echo "$detect"
+            fi
+        }
+
+        # Re-read properly
+        local env_detect
+        env_detect="$(DOTTY_ENV_DETECT=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); source "$dir/dotty.conf"; echo "$DOTTY_ENV_DETECT")"
+        if [[ -n "$env_detect" ]]; then
+            local detected
+            detected="$(eval "$env_detect")"
+            if [[ -n "$detected" ]]; then
+                echo "$detected"
+                return 0
+            fi
+        fi
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Symlink functions
+# ---------------------------------------------------------------------------
+
+# Patterns to exclude from symlinking.
+EXCLUDE_PATTERNS=(
+    .git .gitignore .gitmodules
+    README.md LICENSE
+    install.sh dotty.conf dotty-install.sh
+    .DS_Store
+)
+
+should_exclude() {
+    local name="$1"
+    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+        [[ "$name" == "$pattern" ]] && return 0
+    done
+    return 1
+}
+
+# Create or update a symlink. Backs up real files to DOTTY_BACKUPS_DIR.
+create_symlink() {
+    local source="$1"
+    local target="$2"
+
+    if [[ -L "$target" ]]; then
+        local current
+        current="$(readlink "$target")"
+        if [[ "$current" == "$source" ]]; then
+            info "~${target#"$HOME"} already linked... Skipping."
+            return 0
+        else
+            info "Updating symlink: ~${target#"$HOME"}"
+            rm "$target"
+        fi
+    elif [[ -e "$target" ]]; then
+        # Back up existing real file
+        local rel="${target#"$HOME"/}"
+        local backup="$DOTTY_BACKUPS_DIR/$rel"
+        mkdir -p "$(dirname "$backup")"
+        mv "$target" "$backup"
+        warning "Backed up ~${target#"$HOME"} → ~/.dotty/backups/$rel"
+    fi
+
+    if ln -s "$source" "$target"; then
+        success "Linked: ~${target#"$HOME"}"
+    else
+        warning "Failed to link: ~${target#"$HOME"}"
+        return 1
+    fi
+}
+
+# Recursively symlink contents of source_dir into target_dir.
+# Directories are merged (recursed into), files are symlinked.
+create_symlinks_from_dir() {
+    local source_dir="$1"
+    local target_dir="$2"
+
+    [[ -d "$source_dir" ]] || return 0
+
+    mkdir -p "$target_dir"
+
+    local item
+    for item in "$source_dir"/*; do
+        [[ -e "$item" ]] || continue  # handle empty glob
+
+        local name
+        name="$(basename "$item")"
+
+        should_exclude "$name" && continue
+
+        local target_item="$target_dir/$name"
+
+        if [[ -d "$item" ]]; then
+            if [[ -L "$target_item" ]]; then
+                local current
+                current="$(readlink "$target_item")"
+                if [[ "$current" == "$item" ]]; then
+                    info "~${target_item#"$HOME"} already linked... Skipping."
+                else
+                    info "Updating symlink: ~${target_item#"$HOME"}"
+                    rm "$target_item"
+                    create_symlink "$item" "$target_item"
+                fi
+            elif [[ -d "$target_item" ]]; then
+                # Real directory exists — recurse to merge contents
+                create_symlinks_from_dir "$item" "$target_item"
+            else
+                create_symlink "$item" "$target_item"
+            fi
+        else
+            create_symlink "$item" "$target_item"
+        fi
+    done
+
+    # Also handle hidden files (dotfiles within home/)
+    for item in "$source_dir"/.*; do
+        [[ -e "$item" ]] || continue
+        local name
+        name="$(basename "$item")"
+        [[ "$name" == "." || "$name" == ".." ]] && continue
+        should_exclude "$name" && continue
+
+        local target_item="$target_dir/$name"
+
+        if [[ -d "$item" ]]; then
+            if [[ -L "$target_item" ]]; then
+                local current
+                current="$(readlink "$target_item")"
+                if [[ "$current" == "$item" ]]; then
+                    info "~${target_item#"$HOME"} already linked... Skipping."
+                else
+                    info "Updating symlink: ~${target_item#"$HOME"}"
+                    rm "$target_item"
+                    create_symlink "$item" "$target_item"
+                fi
+            elif [[ -d "$target_item" ]]; then
+                create_symlinks_from_dir "$item" "$target_item"
+            else
+                create_symlink "$item" "$target_item"
+            fi
+        else
+            create_symlink "$item" "$target_item"
+        fi
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Core operations
+# ---------------------------------------------------------------------------
+
+# Pull a repo if the working tree is clean.
+pull_if_clean() {
+    local dir="$1"
+    if [[ ! -d "$dir/.git" ]]; then
+        return 0
+    fi
+
+    if (cd "$dir" && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null); then
+        info "Pulling $(basename "$dir")..."
+        (cd "$dir" && git pull --ff-only 2>/dev/null) || warning "Failed to pull $(basename "$dir")"
+    else
+        warning "$(basename "$dir") has uncommitted changes, skipping pull."
+    fi
+}
+
+# Process a single repo: symlink home/, apply env overlay, run hook.
+process_repo() {
+    local repo_dir="$1"
+    local env="${2:-}"
+
+    read_config "$repo_dir"
+    local name="$DOTTY_NAME"
+
+    title "Processing $name"
+
+    # Symlink home/ → $HOME
+    if [[ -d "$repo_dir/home" ]]; then
+        info "Linking home/"
+        create_symlinks_from_dir "$repo_dir/home" "$HOME"
+    fi
+
+    # Environment overlay: $env/home/ → $HOME
+    if [[ -n "$env" && -d "$repo_dir/$env/home" ]]; then
+        info "Linking $env/home/ overlay"
+        create_symlinks_from_dir "$repo_dir/$env/home" "$HOME"
+    fi
+
+    # Run install hook
+    if [[ -x "$repo_dir/dotty-install.sh" ]]; then
+        info "Running dotty-install.sh"
+        (
+            export DOTTY_REPO_DIR="$repo_dir"
+            export DOTTY_ENV="${env:-}"
+            cd "$repo_dir"
+            ./dotty-install.sh
+        )
+    elif [[ -f "$repo_dir/dotty-install.sh" ]]; then
+        warning "dotty-install.sh exists but is not executable in $name"
+    fi
+}
+
+# Full install/update cycle for the resolved chain.
+run_chain() {
+    local pull="${1:-true}"
+    local env
+    env="$(detect_environment)"
+
+    if [[ -n "$env" ]]; then
+        info "Detected environment: $env"
+        export DOTTY_ENV="$env"
+    fi
+
+    local i
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        local dir="${CHAIN_PATHS[$i]}"
+        local name="${CHAIN_NAMES[$i]}"
+
+        if [[ "$pull" == "true" ]]; then
+            pull_if_clean "$dir"
+        fi
+
+        process_repo "$dir" "$env"
+        registry_set "$name" "$dir"
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+cmd_install() {
+    local source="${1:-}"
+    [[ -n "$source" ]] || die "Usage: dotty install <url-or-path>"
+
+    registry_init
+
+    # Resolve to local path (clone if URL)
+    local repo_dir
+    if [[ -d "$source" ]]; then
+        repo_dir="$(cd "$source" && pwd)"
+    else
+        repo_dir="$(ensure_repo "$source")"
+    fi
+
+    # Resolve full chain
+    CHAIN_NAMES=()
+    CHAIN_PATHS=()
+    _RESOLVING=()
+    resolve_chain "$repo_dir"
+
+    run_chain "true"
+
+    echo ""
+    success "Install complete!"
+    cmd_status
+}
+
+cmd_update() {
+    local target="${1:-}"
+
+    registry_init
+
+    if [[ -n "$target" ]]; then
+        # Update a single repo, but re-run full chain
+        local path
+        path="$(registry_get "$target")"
+        [[ -n "$path" ]] || die "Unknown repo: $target"
+        [[ -d "$path" ]] || die "Repo directory not found: $path"
+
+        pull_if_clean "$path"
+
+        # Still need to resolve and run the full chain since parent
+        # changes could affect children
+        local leaf_path=""
+        local leaf_name=""
+        # Find a leaf repo (one that extends this target)
+        while IFS='=' read -r name rpath; do
+            [[ -n "$name" ]] || continue
+            if [[ -f "$rpath/dotty.conf" ]]; then
+                local extends_names
+                extends_names="$(DOTTY_EXTENDS=(); source "$rpath/dotty.conf"; echo "${DOTTY_EXTENDS[*]:-}")"
+                if [[ -n "$extends_names" ]]; then
+                    leaf_path="$rpath"
+                    leaf_name="$name"
+                fi
+            fi
+        done < "$DOTTY_REGISTRY"
+
+        # If we found a leaf, resolve from there; otherwise just process the target
+        if [[ -n "$leaf_path" ]]; then
+            CHAIN_NAMES=()
+            CHAIN_PATHS=()
+            _RESOLVING=()
+            resolve_chain "$leaf_path"
+            run_chain "false"
+        else
+            CHAIN_NAMES=()
+            CHAIN_PATHS=()
+            _RESOLVING=()
+            resolve_chain "$path"
+            run_chain "false"
+        fi
+    else
+        # Update all: find a leaf repo to resolve the full chain from
+        local leaf_path=""
+        while IFS='=' read -r name rpath; do
+            [[ -n "$name" ]] || continue
+            [[ -d "$rpath" ]] || continue
+            leaf_path="$rpath"
+        done < "$DOTTY_REGISTRY"
+
+        [[ -n "$leaf_path" ]] || die "No repos registered. Run 'dotty install' first."
+
+        CHAIN_NAMES=()
+        CHAIN_PATHS=()
+        _RESOLVING=()
+        resolve_chain "$leaf_path"
+        run_chain "true"
+    fi
+
+    echo ""
+    success "Update complete!"
+}
+
+cmd_link() {
+    local target="${1:-}"
+
+    registry_init
+
+    if [[ -n "$target" ]]; then
+        local path
+        path="$(registry_get "$target")"
+        [[ -n "$path" ]] || die "Unknown repo: $target"
+
+        CHAIN_NAMES=()
+        CHAIN_PATHS=()
+        _RESOLVING=()
+        resolve_chain "$path"
+    else
+        # Find leaf and resolve full chain
+        local leaf_path=""
+        while IFS='=' read -r name rpath; do
+            [[ -n "$name" ]] || continue
+            [[ -d "$rpath" ]] || continue
+            leaf_path="$rpath"
+        done < "$DOTTY_REGISTRY"
+
+        [[ -n "$leaf_path" ]] || die "No repos registered. Run 'dotty install' first."
+
+        CHAIN_NAMES=()
+        CHAIN_PATHS=()
+        _RESOLVING=()
+        resolve_chain "$leaf_path"
+    fi
+
+    local env
+    env="$(detect_environment)"
+    [[ -n "$env" ]] && info "Detected environment: $env"
+
+    local i
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        local dir="${CHAIN_PATHS[$i]}"
+        process_repo "$dir" "$env"
+    done
+
+    echo ""
+    success "Linking complete!"
+}
+
+cmd_add() {
+    local file=""
+    local repo_name=""
+
+    # Parse args
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --repo)
+                repo_name="$2"
+                shift 2
+                ;;
+            --repo=*)
+                repo_name="${1#--repo=}"
+                shift
+                ;;
+            *)
+                file="$1"
+                shift
+                ;;
+        esac
+    done
+
+    [[ -n "$file" ]] || die "Usage: dotty add <file> [--repo <name>]"
+    [[ -e "$file" ]] || die "File not found: $file"
+    [[ -L "$file" ]] && die "Already a symlink: $file"
+
+    registry_init
+
+    # Resolve file to absolute path
+    local abs_file
+    abs_file="$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"
+
+    # Determine target repo
+    local repo_path=""
+    if [[ -n "$repo_name" ]]; then
+        repo_path="$(registry_get "$repo_name")"
+        [[ -n "$repo_path" ]] || die "Unknown repo: $repo_name"
+    else
+        # Count registered repos
+        local count
+        count="$(wc -l < "$DOTTY_REGISTRY" | tr -d ' ')"
+
+        if [[ "$count" -eq 0 ]]; then
+            die "No repos registered. Run 'dotty install' first."
+        elif [[ "$count" -eq 1 ]]; then
+            repo_name="$(cut -d= -f1 "$DOTTY_REGISTRY")"
+            repo_path="$(cut -d= -f2- "$DOTTY_REGISTRY")"
+        else
+            echo "Multiple repos registered. Which one?"
+            local i=1
+            while IFS='=' read -r name rpath; do
+                echo "  $i) $name ($rpath)"
+                i=$((i + 1))
+            done < "$DOTTY_REGISTRY"
+            echo -n "Choice: "
+            read -r choice
+            repo_name="$(sed -n "${choice}p" "$DOTTY_REGISTRY" | cut -d= -f1)"
+            repo_path="$(sed -n "${choice}p" "$DOTTY_REGISTRY" | cut -d= -f2-)"
+        fi
+    fi
+
+    [[ -d "$repo_path" ]] || die "Repo directory not found: $repo_path"
+
+    # Determine destination within repo
+    local rel_path="${abs_file#"$HOME"/}"
+    local dest="$repo_path/home/$rel_path"
+
+    mkdir -p "$(dirname "$dest")"
+    mv "$abs_file" "$dest"
+    ln -s "$dest" "$abs_file"
+
+    success "Moved: ~/$rel_path → $repo_name/home/$rel_path"
+    success "Linked: ~/$rel_path"
+    echo ""
+    info "Don't forget to commit the new file:"
+    echo -e "  ${COLOR_DIM}cd $repo_path && git add home/$rel_path${COLOR_NONE}"
+}
+
+cmd_status() {
+    registry_init
+
+    title "dotty status"
+
+    # Read registry
+    local count=0
+    local repos=()
+    while IFS='=' read -r name rpath; do
+        [[ -n "$name" ]] || continue
+        repos+=("$name=$rpath")
+        count=$((count + 1))
+    done < "$DOTTY_REGISTRY"
+
+    if [[ $count -eq 0 ]]; then
+        info "No repos registered."
+        return 0
+    fi
+
+    # Resolve chain from the last registered repo (leaf)
+    local last_path="${repos[-1]#*=}"
+    if [[ -d "$last_path" && -f "$last_path/dotty.conf" ]]; then
+        CHAIN_NAMES=()
+        CHAIN_PATHS=()
+        _RESOLVING=()
+        resolve_chain "$last_path" 2>/dev/null || true
+    fi
+
+    # Show chain
+    if [[ ${#CHAIN_NAMES[@]} -gt 0 ]]; then
+        local chain_str=""
+        for (( i=0; i<${#CHAIN_NAMES[@]}; i++ )); do
+            [[ -n "$chain_str" ]] && chain_str+=" → "
+            chain_str+="${CHAIN_NAMES[$i]}"
+        done
+        echo -e "  Chain: ${COLOR_GREEN}$chain_str${COLOR_NONE}"
+    fi
+
+    # Show environment
+    local env=""
+    if [[ ${#CHAIN_PATHS[@]} -gt 0 ]]; then
+        env="$(detect_environment 2>/dev/null)" || true
+    fi
+    if [[ -n "$env" ]]; then
+        echo -e "  Env:   ${COLOR_GREEN}$env${COLOR_NONE}"
+    fi
+
+    echo ""
+
+    # Show repos
+    for entry in "${repos[@]}"; do
+        local name="${entry%%=*}"
+        local rpath="${entry#*=}"
+
+        local status_icon="?"
+        local status_text="unknown"
+        if [[ -d "$rpath/.git" ]]; then
+            if (cd "$rpath" && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null); then
+                status_icon="${COLOR_GREEN}✓${COLOR_NONE}"
+                status_text="clean"
+            else
+                status_icon="${COLOR_YELLOW}●${COLOR_NONE}"
+                status_text="modified"
+            fi
+        elif [[ -d "$rpath" ]]; then
+            status_icon="${COLOR_DIM}-${COLOR_NONE}"
+            status_text="not a git repo"
+        else
+            status_icon="${COLOR_RED}✗${COLOR_NONE}"
+            status_text="missing"
+        fi
+
+        echo -e "  $status_icon $name ${COLOR_DIM}($rpath) [$status_text]${COLOR_NONE}"
+    done
+}
+
+cmd_register() {
+    local path="${1:-}"
+    local name="${2:-}"
+
+    [[ -n "$path" ]] || die "Usage: dotty register <path> [name]"
+
+    registry_init
+
+    # Resolve to absolute path
+    [[ -d "$path" ]] || die "Directory not found: $path"
+    path="$(cd "$path" && pwd)"
+
+    if [[ -z "$name" ]]; then
+        [[ -f "$path/dotty.conf" ]] || die "No dotty.conf found and no name provided"
+        name="$(DOTTY_NAME=""; source "$path/dotty.conf"; echo "$DOTTY_NAME")"
+        [[ -n "$name" ]] || die "DOTTY_NAME not set in $path/dotty.conf"
+    fi
+
+    registry_set "$name" "$path"
+    success "Registered $name → $path"
+}
+
+cmd_unregister() {
+    local name="${1:-}"
+    [[ -n "$name" ]] || die "Usage: dotty unregister <name>"
+
+    registry_init
+
+    local path
+    path="$(registry_get "$name")"
+    [[ -n "$path" ]] || die "Unknown repo: $name"
+
+    registry_remove "$name"
+    success "Unregistered $name"
+}
+
+cmd_help() {
+    cat <<'EOF'
+dotty - a dotfiles manager with overlay semantics
+
+Usage: dotty <command> [args]
+
+Commands:
+  install <url-or-path>   Resolve chain, clone deps, link files, run hooks
+  update [name]           Pull all repos (or one), re-link, re-run hooks
+  add <file> [--repo X]   Move a dotfile into a repo and symlink it back
+  link [name]             Re-create symlinks only (skip pull and hooks)
+  status                  Show repos, chain order, and detected environment
+  register <path> [name]  Register an already-cloned repo
+  unregister <name>       Remove a repo from the registry
+  help                    Show this help
+  version                 Show version
+
+Environment:
+  DOTTY_DIR    Base directory for dotty state (default: ~/.dotty)
+EOF
+}
+
+cmd_version() {
+    echo "dotty $DOTTY_VERSION"
+}
+
+# ---------------------------------------------------------------------------
+# Main dispatch
+# ---------------------------------------------------------------------------
+
+main() {
+    local cmd="${1:-help}"
+    shift || true
+
+    case "$cmd" in
+        install)      cmd_install "$@" ;;
+        update)       cmd_update "$@" ;;
+        add)          cmd_add "$@" ;;
+        link)         cmd_link "$@" ;;
+        status)       cmd_status "$@" ;;
+        register)     cmd_register "$@" ;;
+        unregister)   cmd_unregister "$@" ;;
+        help|--help)  cmd_help ;;
+        version|--version) cmd_version ;;
+        *)            die "Unknown command: $cmd. Run 'dotty help' for usage." ;;
+    esac
+}
+
+main "$@"
