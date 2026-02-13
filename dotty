@@ -462,7 +462,7 @@ process_repo() {
         create_symlinks_from_dir "$repo_dir/$env/home" "$HOME"
     fi
 
-    # Run install hook
+    # Run install hook (non-fatal so later repos still process)
     if [[ -x "$repo_dir/dotty-install.sh" ]]; then
         info "Running dotty-install.sh"
         (
@@ -470,7 +470,7 @@ process_repo() {
             export DOTTY_ENV="${env:-}"
             cd "$repo_dir"
             ./dotty-install.sh
-        )
+        ) || warning "dotty-install.sh failed in $name (exit $?)"
     elif [[ -f "$repo_dir/dotty-install.sh" ]]; then
         warning "dotty-install.sh exists but is not executable in $name"
     fi
@@ -487,17 +487,20 @@ run_chain() {
         export DOTTY_ENV="$env"
     fi
 
+    # Register all repos first so the registry is complete even if a hook fails.
     local i
     for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        registry_set "${CHAIN_NAMES[$i]}" "${CHAIN_PATHS[$i]}"
+    done
+
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
         local dir="${CHAIN_PATHS[$i]}"
-        local name="${CHAIN_NAMES[$i]}"
 
         if [[ "$pull" == "true" ]]; then
             pull_if_clean "$dir"
         fi
 
         process_repo "$dir" "$env"
-        registry_set "$name" "$dir"
     done
 }
 
