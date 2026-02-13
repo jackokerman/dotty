@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. Dotty is open source, so this file must never reference specific user directories, personal repo names, or machine-specific paths. Use `dotty status` and `~/.dotty/registry` to discover the user's setup at runtime instead.
 
 ## Project overview
 
@@ -57,6 +57,29 @@ DOTTY_ENV_DETECT='[[ -d /opt/stripe ]] && echo "laptop"'
 
 Files in `repo/home/` are symlinked to `$HOME`. Environment overlays live in `repo/<env>/home/`.
 
+## Testing changes
+
+After modifying `dotty` or `install.sh`, test against the user's actual dotfiles repos. Use `./dotty status` or read `~/.dotty/registry` to discover what's registered on this machine. Common test workflows:
+
+```bash
+./dotty status    # see registered repos, chain order, environment
+./dotty link      # re-link everything (fast, no hooks)
+./dotty install   # full install cycle (symlinks + hooks)
+./dotty update    # pull and re-link everything
+```
+
+For destructive or risky changes (symlink logic, chain resolution, directory merging), create a scratch repo in a temp directory to test first before running against real dotfiles.
+
 ## Keeping dotfiles repos in sync
 
-When dotty's hook contract changes (new env vars, renamed hook files, changed behavior), check the user's registered dotfiles repos and update them to match. The registry at `~/.dotty/registry` lists all managed repos.
+When dotty's hook contract changes (new env vars, renamed hook files, changed behavior), check the user's registered dotfiles repos and update them to match. Read `~/.dotty/registry` to find repo paths, then inspect and update those repos directly.
+
+## Keeping the README in sync
+
+The `README.md` documents dotty's commands, configuration format, hook contract, and directory layout. When any of these change in the code, update the README to match. Check for:
+
+- Command behavior or flags that changed
+- New or renamed environment variables
+- Changes to `dotty.conf` fields
+- Hook execution semantics
+- Directory structure or state files
