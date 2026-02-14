@@ -328,7 +328,6 @@ cmd_install() {
         run_chain "true" "install"
     fi
 
-    echo ""
     success "Install complete!"
     cmd_status
 }
@@ -355,7 +354,6 @@ cmd_update() {
         run_chain "true" "update"
     fi
 
-    echo ""
     success "Update complete!"
 }
 
@@ -387,7 +385,6 @@ cmd_link() {
         process_repo "$dir" "$env" "link"
     done
 
-    echo ""
     success "Linking complete!"
 }
 

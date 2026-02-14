@@ -275,8 +275,8 @@ Available functions:
 
 | Function | Description |
 |---|---|
-| `title "msg"` | Purple heading with leading newline |
-| `info "msg"` | Blue info message |
+| `title "msg"` | Bold heading with blue `==>` arrow prefix |
+| `info "msg"` | Dim progress message |
 | `success "msg"` | Green success message |
 | `warning "msg"` | Yellow warning message |
 | `die "msg"` | Red error message, exits with code 1 |

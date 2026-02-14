@@ -12,10 +12,10 @@ DOTTY_REPO="https://github.com/jackokerman/dotty.git"
 
 COLOR_GREEN="\033[32m"
 COLOR_RED="\033[31m"
-COLOR_BLUE="\033[34m"
+COLOR_DIM="\033[2m"
 COLOR_NONE="\033[0m"
 
-info()    { echo -e "${COLOR_BLUE}Info: ${COLOR_NONE}$1"; }
+info()    { echo -e "${COLOR_DIM}$1${COLOR_NONE}"; }
 success() { echo -e "${COLOR_GREEN}$1${COLOR_NONE}"; }
 die()     { echo -e "${COLOR_RED}Error: ${COLOR_NONE}$1" >&2; exit 1; }
 
@@ -67,7 +67,6 @@ if [[ -f "$HOME/.bashrc" ]] && ! grep -qF '.dotty/bin' "$HOME/.bashrc"; then
     info "Added dotty to PATH in .bashrc"
 fi
 
-echo ""
 success "dotty installed successfully!"
 echo ""
 echo "  Next steps:"

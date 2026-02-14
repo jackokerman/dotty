@@ -11,14 +11,14 @@ _DOTTY_LIB_LOADED=1
 COLOR_BLUE="\033[34m"
 COLOR_GREEN="\033[32m"
 COLOR_RED="\033[31m"
-COLOR_PURPLE="\033[35m"
 COLOR_YELLOW="\033[33m"
 # shellcheck disable=SC2034
 COLOR_DIM="\033[2m"
+COLOR_BOLD="\033[1m"
 COLOR_NONE="\033[0m"
 
-title()   { echo -e "${COLOR_PURPLE}$1${COLOR_NONE}"; }
-info()    { echo -e "${COLOR_BLUE}Info: ${COLOR_NONE}$1"; }
+title()   { echo -e "${COLOR_BLUE}==>${COLOR_NONE} ${COLOR_BOLD}$1${COLOR_NONE}"; }
+info()    { echo -e "${COLOR_DIM}$1${COLOR_NONE}"; }
 success() { echo -e "${COLOR_GREEN}$1${COLOR_NONE}"; }
 warning() { echo -e "${COLOR_YELLOW}Warning: ${COLOR_NONE}$1"; }
 die()     { echo -e "${COLOR_RED}Error: ${COLOR_NONE}$1" >&2; exit 1; }
