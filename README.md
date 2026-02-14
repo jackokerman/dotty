@@ -176,10 +176,10 @@ dotty update dotfiles     # pull just one repo, re-link the full chain
 
 ### `dotty sync [name]`
 
-Pulls all repos (or a specific one) and re-creates symlinks, but skips hooks. This is the fast option for syncing dotfile changes across machines when you don't need to re-run install scripts like `brew bundle`.
+Pulls all repos (or a specific one), re-creates symlinks, and runs hooks with `DOTTY_COMMAND="sync"`. Hook scripts should use this to skip slow operations (Homebrew, macOS setup) while still running fast, idempotent setup like Claude config, editor settings, and shell initialization.
 
 ```bash
-dotty sync              # pull and re-link everything (no hooks)
+dotty sync              # pull, re-link, run lightweight hooks
 dotty sync dotfiles     # pull just one repo, re-link the full chain
 ```
 
@@ -226,11 +226,11 @@ Remove a repo from the registry. This doesn't delete the repo or its symlinks.
 
 ## Hooks
 
-If a repo has an executable `dotty-run.sh`, dotty runs it after creating symlinks during `install` and `update` (but not `sync` or `link`). These environment variables are available:
+If a repo has an executable `dotty-run.sh`, dotty runs it after creating symlinks during `install`, `update`, and `sync` (but not `link`). These environment variables are available:
 
 - `DOTTY_REPO_DIR` — absolute path to the repo
 - `DOTTY_ENV` — detected environment (empty if none)
-- `DOTTY_COMMAND` — the command that invoked the hook (`install` or `update`)
+- `DOTTY_COMMAND` — the command that invoked the hook (`install`, `update`, or `sync`)
 - `DOTTY_VERBOSE` — `"true"` when `-v`/`--verbose` is set
 - `DOTTY_LIB` — path to the hook utility library (see [Hook utilities](#hook-utilities))
 
@@ -238,20 +238,27 @@ Hooks run with the repo as the working directory. They're the right place for in
 
 ### Conditional execution
 
-Since hooks run on both `install` and `update`, you can use `DOTTY_COMMAND` to control what runs when. This is useful for one-time setup like macOS system preferences or font installation that you don't want to repeat on every update.
+Since hooks run on `install`, `update`, and `sync`, you can use `DOTTY_COMMAND` to control what runs when. Put fast, idempotent setup at the top level and guard slow operations behind command checks.
 
 ```bash
 #!/usr/bin/env bash
 # dotty-run.sh
 
-# Always run these (idempotent, fast)
-brew bundle --no-lock --file="$DOTTY_REPO_DIR/Brewfile"
+# Always run (install, update, and sync) — fast and idempotent
+setup_editor_config
+setup_shell_plugins
 
-# Only on first install
-if [[ "$DOTTY_COMMAND" == "install" ]]; then
-    ./scripts/macos-defaults.sh
-    ./scripts/install-fonts.sh
-fi
+# Slow operations — skip during sync
+case "$DOTTY_COMMAND" in
+    install)
+        brew bundle --no-lock --file="$DOTTY_REPO_DIR/Brewfile"
+        ./scripts/macos-defaults.sh
+        ./scripts/install-fonts.sh
+        ;;
+    update)
+        brew bundle --no-lock --file="$DOTTY_REPO_DIR/Brewfile"
+        ;;
+esac
 ```
 
 For scripts that should only run once ever (even across reinstalls), use a marker file:

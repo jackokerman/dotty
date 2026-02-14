@@ -252,8 +252,8 @@ process_repo() {
     fi
 
     # Run hook (non-fatal so later repos still process).
-    # Hooks are skipped during "link" and "sync".
-    if [[ "$command" != "link" && "$command" != "sync" ]]; then
+    # Hooks are skipped during "link" (symlink-only mode).
+    if [[ "$command" != "link" ]]; then
         if [[ -x "$repo_dir/dotty-run.sh" ]]; then
             info "Running dotty-run.sh"
             (
@@ -594,7 +594,7 @@ Usage: dotty [-v] <command> [args]
 Commands:
   install [url-or-path]   Resolve chain, clone deps, link files, run dotty-run.sh
   update [name]           Pull all repos (or one), re-link, re-run dotty-run.sh
-  sync [name]             Pull all repos (or one), re-link (skip hooks)
+  sync [name]             Pull all repos (or one), re-link, re-run hooks (skip slow setup)
   add <file> [--repo X]   Move a dotfile into a repo and symlink it back
   link [name]             Re-create symlinks only (skip pull and hooks)
   status                  Show repos, chain order, and detected environment
@@ -609,7 +609,7 @@ Options:
 Hook environment:
   DOTTY_REPO_DIR   Absolute path to the repo being processed
   DOTTY_ENV        Detected environment (empty if none)
-  DOTTY_COMMAND    Command that invoked the hook (install or update)
+  DOTTY_COMMAND    Command that invoked the hook (install, update, or sync)
   DOTTY_VERBOSE    "true" when -v/--verbose is set
   DOTTY_LIB        Path to hook utility library (source "$DOTTY_LIB")
 
