@@ -276,7 +276,7 @@ Available functions:
 | Function | Description |
 |---|---|
 | `title "msg"` | Bold heading with blue `==>` arrow prefix |
-| `info "msg"` | Dim progress message |
+| `info "msg"` | Plain progress message |
 | `success "msg"` | Green success message |
 | `warning "msg"` | Yellow warning message |
 | `die "msg"` | Red error message, exits with code 1 |

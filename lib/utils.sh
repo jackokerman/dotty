@@ -18,7 +18,7 @@ COLOR_BOLD="\033[1m"
 COLOR_NONE="\033[0m"
 
 title()   { echo -e "${COLOR_BLUE}==>${COLOR_NONE} ${COLOR_BOLD}$1${COLOR_NONE}"; }
-info()    { echo -e "${COLOR_DIM}$1${COLOR_NONE}"; }
+info()    { echo -e "$1"; }
 success() { echo -e "${COLOR_GREEN}$1${COLOR_NONE}"; }
 warning() { echo -e "${COLOR_YELLOW}Warning: ${COLOR_NONE}$1"; }
 die()     { echo -e "${COLOR_RED}Error: ${COLOR_NONE}$1" >&2; exit 1; }

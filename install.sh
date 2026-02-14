@@ -12,10 +12,9 @@ DOTTY_REPO="https://github.com/jackokerman/dotty.git"
 
 COLOR_GREEN="\033[32m"
 COLOR_RED="\033[31m"
-COLOR_DIM="\033[2m"
 COLOR_NONE="\033[0m"
 
-info()    { echo -e "${COLOR_DIM}$1${COLOR_NONE}"; }
+info()    { echo -e "$1"; }
 success() { echo -e "${COLOR_GREEN}$1${COLOR_NONE}"; }
 die()     { echo -e "${COLOR_RED}Error: ${COLOR_NONE}$1" >&2; exit 1; }
 
