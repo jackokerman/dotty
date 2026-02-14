@@ -39,7 +39,7 @@ _LINK_DEPTH="${_LINK_DEPTH:-0}"
 EXCLUDE_PATTERNS=(
     .git .gitignore .gitmodules
     README.md LICENSE
-    install.sh dotty.conf dotty-install.sh
+    install.sh dotty.conf dotty-run.sh
     .DS_Store
 )
 

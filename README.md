@@ -257,7 +257,7 @@ fi
 
 ### Hook utilities
 
-Dotty ships a utility library at `lib/hooks.sh` that hook scripts can source via the `DOTTY_LIB` environment variable. This gives hooks access to the same logging and symlink functions that dotty uses internally, so you don't have to maintain your own copies.
+Dotty ships a utility library at `lib/utils.sh` that hook scripts can source via the `DOTTY_LIB` environment variable. This gives hooks access to the same logging and symlink functions that dotty uses internally, so you don't have to maintain your own copies.
 
 ```bash
 #!/usr/bin/env bash
@@ -305,7 +305,7 @@ Dotty stores everything in `~/.dotty/`:
 ```
 ~/.dotty/
 ├── bin/dotty           # the script (on PATH)
-├── lib/hooks.sh        # utility library for hook scripts
+├── lib/utils.sh        # utility library for hook scripts
 ├── registry            # name=path, one per line
 ├── repos/              # auto-cloned repos
 ├── backups/            # backed-up files replaced by symlinks

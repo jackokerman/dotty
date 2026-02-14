@@ -10,8 +10,8 @@ DOTTY_REPOS_DIR="$DOTTY_DIR/repos"
 DOTTY_BACKUPS_DIR="$DOTTY_DIR/backups"
 DOTTY_VERBOSE="${DOTTY_VERBOSE:-false}"
 
-# shellcheck source=lib/hooks.sh
-source "$(cd "$(dirname "$0")" && pwd)/lib/hooks.sh"
+# shellcheck source=lib/utils.sh
+source "$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
 
 # --- Registry
 
@@ -262,7 +262,7 @@ process_repo() {
                 export DOTTY_COMMAND="${command:-}"
                 export DOTTY_VERBOSE
                 export DOTTY_LIB
-                DOTTY_LIB="$(cd "$(dirname "$0")" && pwd)/lib/hooks.sh"
+                DOTTY_LIB="$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
                 cd "$repo_dir"
                 ./dotty-run.sh
             ) || warning "dotty-run.sh failed in $name (exit $?)"
