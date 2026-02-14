@@ -188,3 +188,26 @@ create_symlinks_from_dir() {
         _SKIP_COUNT=0
     fi
 }
+
+# --- JSON
+
+# Deep-merge source JSON into target (source wins on conflicts).
+# Creates target if it doesn't exist.
+merge_json() {
+    local source="$1"
+    local target="$2"
+
+    [[ -f "$source" ]] || { warning "merge_json: source not found: $source"; return 1; }
+
+    if ! command -v jq &>/dev/null; then
+        warning "merge_json: jq not found, copying source to target"
+        cp "$source" "$target"
+        return 0
+    fi
+
+    if [[ -f "$target" ]]; then
+        jq -s '.[0] * .[1]' "$target" "$source" > "$target.tmp" && mv "$target.tmp" "$target"
+    else
+        cp "$source" "$target"
+    fi
+}
