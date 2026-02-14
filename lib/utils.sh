@@ -17,7 +17,7 @@ COLOR_YELLOW="\033[33m"
 COLOR_DIM="\033[2m"
 COLOR_NONE="\033[0m"
 
-title()   { echo -e "\n${COLOR_PURPLE}$1${COLOR_NONE}"; }
+title()   { echo -e "${COLOR_PURPLE}$1${COLOR_NONE}"; }
 info()    { echo -e "${COLOR_BLUE}Info: ${COLOR_NONE}$1"; }
 success() { echo -e "${COLOR_GREEN}$1${COLOR_NONE}"; }
 warning() { echo -e "${COLOR_YELLOW}Warning: ${COLOR_NONE}$1"; }
