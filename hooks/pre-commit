@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# dotty guard — pre-commit hook that blocks sensitive content.
+# Installed by `dotty guard`. Do not edit directly.
+
+set -euo pipefail
+
+patterns="${DOTTY_GUARD_PATTERNS:-}"
+[[ -n "$patterns" ]] || exit 0
+
+# Build combined regex from newline-separated patterns, skipping blanks and comments.
+combined=""
+while IFS= read -r line; do
+    line="${line## }"
+    line="${line%% }"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ -n "$combined" ]] && combined+="|"
+    combined+="$line"
+done <<< "$patterns"
+
+[[ -n "$combined" ]] || exit 0
+
+if git diff --cached --diff-filter=ACMR -U0 | grep -qiE "$combined"; then
+    echo ""
+    echo "  Blocked by dotty guard."
+    echo ""
+    echo "  Staged changes match a blocked pattern. Review with:"
+    echo ""
+    echo "    git diff --cached | grep -iE '$combined'"
+    echo ""
+    exit 1
+fi

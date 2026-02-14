@@ -22,6 +22,8 @@ _dotty() {
         'status:Show repos, chain, and detected environment'
         'register:Register an already-cloned repo'
         'unregister:Remove a repo from the registry'
+        'guard:Install pre-commit hook to block sensitive content'
+        'unguard:Remove the dotty pre-commit hook'
         'help:Show help'
         'version:Show version'
     )
@@ -52,6 +54,9 @@ _dotty() {
             if (( CURRENT == 3 )); then
                 _files -/
             fi
+            ;;
+        guard|unguard)
+            _files -/
             ;;
     esac
 }

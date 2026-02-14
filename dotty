@@ -585,6 +585,98 @@ cmd_unregister() {
     success "Unregistered $name"
 }
 
+_guard_hook_path() {
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+
+    # Try the hooks directory next to the script first, then fall back to
+    # the DOTTY_DIR layout (hooks/ symlinked into bin/).
+    if [[ -f "$script_dir/hooks/pre-commit" ]]; then
+        echo "$script_dir/hooks/pre-commit"
+    elif [[ -f "$script_dir/../hooks/pre-commit" ]]; then
+        echo "$script_dir/../hooks/pre-commit"
+    else
+        die "Cannot find hooks/pre-commit relative to dotty script"
+    fi
+}
+
+_guard_is_ours() {
+    local hook="$1"
+    [[ -f "$hook" ]] && grep -q "dotty guard" "$hook" 2>/dev/null
+}
+
+_guard_pattern_hint() {
+    if [[ -n "${DOTTY_GUARD_PATTERNS:-}" ]]; then
+        local count=0
+        while IFS= read -r line; do
+            line="${line## }"
+            line="${line%% }"
+            [[ -z "$line" || "$line" == \#* ]] && continue
+            count=$((count + 1))
+        done <<< "$DOTTY_GUARD_PATTERNS"
+        info "DOTTY_GUARD_PATTERNS has $count pattern(s) configured."
+    else
+        warning "DOTTY_GUARD_PATTERNS is not set. The hook will be a no-op until you export it."
+    fi
+}
+
+cmd_guard() {
+    local target="${1:-.}"
+
+    [[ -d "$target" ]] || die "Directory not found: $target"
+    target="$(cd "$target" && pwd)"
+    [[ -d "$target/.git" ]] || die "Not a git repository: $target"
+
+    local hook_dest="$target/.git/hooks/pre-commit"
+    local hook_src
+    hook_src="$(_guard_hook_path)"
+
+    if [[ -f "$hook_dest" ]]; then
+        if _guard_is_ours "$hook_dest"; then
+            success "Guard hook already installed in $target"
+            _guard_pattern_hint
+            return 0
+        fi
+
+        warning "A pre-commit hook already exists in $target"
+        echo -n "  Overwrite it? [y/N] "
+        read -r answer
+        [[ "$answer" =~ ^[Yy]$ ]] || { info "Aborted."; return 1; }
+    fi
+
+    mkdir -p "$target/.git/hooks"
+    cp "$hook_src" "$hook_dest"
+    chmod +x "$hook_dest"
+
+    success "Guard hook installed in $target"
+    _guard_pattern_hint
+}
+
+cmd_unguard() {
+    local target="${1:-.}"
+
+    [[ -d "$target" ]] || die "Directory not found: $target"
+    target="$(cd "$target" && pwd)"
+    [[ -d "$target/.git" ]] || die "Not a git repository: $target"
+
+    local hook="$target/.git/hooks/pre-commit"
+
+    if [[ ! -f "$hook" ]]; then
+        info "No pre-commit hook found in $target"
+        return 0
+    fi
+
+    if ! _guard_is_ours "$hook"; then
+        warning "The pre-commit hook in $target was not installed by dotty."
+        echo -n "  Remove it anyway? [y/N] "
+        read -r answer
+        [[ "$answer" =~ ^[Yy]$ ]] || { info "Aborted."; return 1; }
+    fi
+
+    rm "$hook"
+    success "Guard hook removed from $target"
+}
+
 cmd_help() {
     cat <<'EOF'
 dotty - a dotfiles manager with overlay semantics
@@ -600,6 +692,8 @@ Commands:
   status                  Show repos, chain order, and detected environment
   register <path> [name]  Register an already-cloned repo
   unregister <name>       Remove a repo from the registry
+  guard [path]            Install pre-commit hook to block sensitive content
+  unguard [path]          Remove the dotty pre-commit hook
   help                    Show this help
   version                 Show version
 
@@ -612,6 +706,9 @@ Hook environment:
   DOTTY_COMMAND    Command that invoked the hook (install, update, or sync)
   DOTTY_VERBOSE    "true" when -v/--verbose is set
   DOTTY_LIB        Path to hook utility library (source "$DOTTY_LIB")
+
+Guard:
+  DOTTY_GUARD_PATTERNS   Newline-separated patterns to block in commits
 
 General:
   DOTTY_DIR        Base directory for dotty state (default: ~/.dotty)
@@ -647,6 +744,8 @@ main() {
         status)       cmd_status "$@" ;;
         register)     cmd_register "$@" ;;
         unregister)   cmd_unregister "$@" ;;
+        guard)        cmd_guard "$@" ;;
+        unguard)      cmd_unguard "$@" ;;
         help|--help)  cmd_help ;;
         version|--version) cmd_version ;;
         *)            die "Unknown command: $cmd. Run 'dotty help' for usage." ;;

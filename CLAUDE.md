@@ -27,6 +27,8 @@ The `dotty` script is structured as a monolithic bash program with procedural se
 
 **Directory merging:** when linking directories, dotty recurses into them and symlinks individual files rather than replacing the whole directory. If a directory symlink already points elsewhere, it "explodes" it into a real directory with child symlinks to preserve both sources.
 
+**Guard:** `dotty guard`/`unguard` install a pre-commit hook (`hooks/pre-commit`) into a git repo's `.git/hooks/`. The hook reads `DOTTY_GUARD_PATTERNS` (newline-separated regexes) at commit time and blocks commits containing matches. The hook is a standalone script, not generated or templated.
+
 ## Bash conventions
 
 - `set -euo pipefail` at the top

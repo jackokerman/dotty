@@ -36,6 +36,7 @@ elif [[ -d "$DOTTY_DIR" ]]; then
     cp -f "$tmp_dir/dotty/dotty" "$DOTTY_DIR/dotty" 2>/dev/null || true
     cp -f "$tmp_dir/dotty/install.sh" "$DOTTY_DIR/install.sh" 2>/dev/null || true
     cp -rf "$tmp_dir/dotty/completions" "$DOTTY_DIR/completions" 2>/dev/null || true
+    cp -rf "$tmp_dir/dotty/hooks" "$DOTTY_DIR/hooks" 2>/dev/null || true
     mkdir -p "$DOTTY_DIR/lib"
     cp -rf "$tmp_dir/dotty/lib"/* "$DOTTY_DIR/lib/" 2>/dev/null || true
     rm -rf "$tmp_dir"
@@ -47,6 +48,7 @@ fi
 mkdir -p "$DOTTY_DIR/bin"
 ln -sf "$DOTTY_DIR/dotty" "$DOTTY_DIR/bin/dotty"
 ln -sfn "$DOTTY_DIR/lib" "$DOTTY_DIR/bin/lib"
+ln -sfn "$DOTTY_DIR/hooks" "$DOTTY_DIR/bin/hooks"
 
 # Ensure directories exist
 mkdir -p "$DOTTY_DIR/repos" "$DOTTY_DIR/backups"

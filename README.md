@@ -314,6 +314,40 @@ fpath=("$HOME/.dotty/completions" $fpath)
 
 Once loaded, completions cover subcommands (`dotty <TAB>`), repo names (`dotty update <TAB>`), file paths (`dotty add <TAB>`), and the `--repo` flag.
 
+## Guard
+
+Dotty can install a pre-commit hook that blocks commits containing sensitive patterns. This is useful for work dotfiles where you want to prevent accidentally committing internal URLs, repo names, or other content into public repos.
+
+### Setup
+
+First, define the patterns you want to block by exporting `DOTTY_GUARD_PATTERNS` in your shell config. Each line is a regex pattern (case-insensitive). Blank lines and `#` comments are ignored.
+
+```bash
+export DOTTY_GUARD_PATTERNS="\
+stripe-internal
+corp\.stripe
+go/th/
+# Jira URLs
+jira\.corp"
+```
+
+Then install the hook into any git repo:
+
+```bash
+dotty guard              # current directory
+dotty guard ~/my-repo    # specific repo
+```
+
+The hook reads `DOTTY_GUARD_PATTERNS` at commit time and blocks the commit if any staged changes match. If the env var is unset, the hook is a no-op.
+
+### `dotty guard [path]`
+
+Installs the pre-commit hook into the target repo's `.git/hooks/`. If a hook already exists, dotty checks whether it's one it installed (via a marker comment). If it is, it reports "already installed". If it's a foreign hook, it prompts before overwriting.
+
+### `dotty unguard [path]`
+
+Removes the pre-commit hook if it was installed by dotty. If the hook is foreign, it prompts before removing.
+
 ## State
 
 Dotty stores everything in `~/.dotty/`:
@@ -322,6 +356,7 @@ Dotty stores everything in `~/.dotty/`:
 ~/.dotty/
 ├── bin/dotty           # the script (on PATH)
 ├── lib/utils.sh        # utility library for hook scripts
+├── hooks/pre-commit    # guard hook template
 ├── registry            # name=path, one per line
 ├── repos/              # auto-cloned repos
 ├── backups/            # backed-up files replaced by symlinks
