@@ -174,6 +174,15 @@ dotty update              # pull and re-link everything
 dotty update dotfiles     # pull just one repo, re-link the full chain
 ```
 
+### `dotty sync [name]`
+
+Pulls all repos (or a specific one) and re-creates symlinks, but skips hooks. This is the fast option for syncing dotfile changes across machines when you don't need to re-run install scripts like `brew bundle`.
+
+```bash
+dotty sync              # pull and re-link everything (no hooks)
+dotty sync dotfiles     # pull just one repo, re-link the full chain
+```
+
 ### `dotty add <file> [--repo <name>]`
 
 Tracks a new dotfile by moving it into a repo and creating a symlink back.
@@ -217,7 +226,7 @@ Remove a repo from the registry. This doesn't delete the repo or its symlinks.
 
 ## Hooks
 
-If a repo has an executable `dotty-run.sh`, dotty runs it after creating symlinks during `install` and `update` (but not `link`). These environment variables are available:
+If a repo has an executable `dotty-run.sh`, dotty runs it after creating symlinks during `install` and `update` (but not `sync` or `link`). These environment variables are available:
 
 - `DOTTY_REPO_DIR` — absolute path to the repo
 - `DOTTY_ENV` — detected environment (empty if none)
