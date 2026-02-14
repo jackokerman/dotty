@@ -586,17 +586,24 @@ cmd_unregister() {
 }
 
 _guard_hook_path() {
+    # Resolve through symlinks so this works when invoked via ~/.dotty/bin/dotty.
+    local script="$0"
+    while [[ -L "$script" ]]; do
+        local target
+        target="$(readlink "$script")"
+        if [[ "$target" == /* ]]; then
+            script="$target"
+        else
+            script="$(dirname "$script")/$target"
+        fi
+    done
     local script_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    script_dir="$(cd "$(dirname "$script")" && pwd)"
 
-    # Try the hooks directory next to the script first, then fall back to
-    # the DOTTY_DIR layout (hooks/ symlinked into bin/).
     if [[ -f "$script_dir/hooks/pre-commit" ]]; then
         echo "$script_dir/hooks/pre-commit"
-    elif [[ -f "$script_dir/../hooks/pre-commit" ]]; then
-        echo "$script_dir/../hooks/pre-commit"
     else
-        die "Cannot find hooks/pre-commit relative to dotty script"
+        die "Cannot find hooks/pre-commit relative to dotty script ($script_dir)"
     fi
 }
 
