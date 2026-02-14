@@ -633,7 +633,10 @@ cmd_guard() {
 
     if [[ -f "$hook_dest" ]]; then
         if _guard_is_ours "$hook_dest"; then
-            success "Guard hook already installed in $target"
+            # Always re-copy to pick up hook updates.
+            cp "$hook_src" "$hook_dest"
+            chmod +x "$hook_dest"
+            success "Guard hook updated in $target"
             _guard_pattern_hint
             return 0
         fi
