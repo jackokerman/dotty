@@ -19,11 +19,25 @@ done <<< "$patterns"
 
 [[ -n "$combined" ]] || exit 0
 
-if git diff --cached --diff-filter=ACMR -U0 | grep -qiE "$combined"; then
+matches="$(git diff --cached --diff-filter=ACMR -U0 | grep -iE "$combined" || true)"
+if [[ -n "$matches" ]]; then
     echo ""
-    echo "  Blocked by dotty guard."
+    echo "  Commit blocked. Staged changes contain sensitive content."
     echo ""
-    echo "  Staged changes match a blocked pattern. Review with:"
+    echo "  DOTTY_GUARD_PATTERNS is configured to prevent committing content"
+    echo "  that matches these patterns (e.g. internal URLs, repo names):"
+    echo ""
+    echo "  Matches found:"
+    echo ""
+    echo "$matches" | head -20 | while IFS= read -r line; do
+        echo "    $line"
+    done
+    local_count="$(echo "$matches" | wc -l | tr -d ' ')"
+    if [[ "$local_count" -gt 20 ]]; then
+        echo "    ... and $((local_count - 20)) more"
+    fi
+    echo ""
+    echo "  To see all matches:"
     echo ""
     echo "    git diff --cached | grep -iE '$combined'"
     echo ""
