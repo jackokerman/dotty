@@ -694,34 +694,34 @@ dotty - a dotfiles manager with overlay semantics
 Usage: dotty [-v] <command> [args]
 
 Commands:
-  install [url-or-path]   Resolve chain, clone deps, link files, run dotty-run.sh
-  update [name]           Pull all repos (or one), re-link, re-run dotty-run.sh
-  sync [name]             Pull all repos (or one), re-link, re-run hooks (skip slow setup)
-  add <file> [--repo X]   Move a dotfile into a repo and symlink it back
-  link [name]             Re-create symlinks only (skip pull and hooks)
-  status                  Show repos, chain order, and detected environment
-  register <path> [name]  Register an already-cloned repo
-  unregister <name>       Remove a repo from the registry
-  guard [path]            Install pre-commit hook to block sensitive content
-  unguard [path]          Remove the dotty pre-commit hook
-  help                    Show this help
-  version                 Show version
+  install [url-or-path]    Resolve chain, clone deps, link files, run dotty-run.sh
+  update [name]            Pull all repos (or one), re-link, re-run dotty-run.sh
+  sync [name]              Pull all repos (or one), re-link, re-run hooks (skip slow setup)
+  add <file> [--repo X]    Move a dotfile into a repo and symlink it back
+  link [name]              Re-create symlinks only (skip pull and hooks)
+  status                   Show repos, chain order, and detected environment
+  register <path> [name]   Register an already-cloned repo
+  unregister <name>        Remove a repo from the registry
+  guard [path]             Install pre-commit hook to block sensitive content
+  unguard [path]           Remove the dotty pre-commit hook
+  help                     Show this help
+  version                  Show version
 
 Options:
-  -v, --verbose    Show per-file skip messages (default: summary only)
+  -v, --verbose            Show per-file skip messages (default: summary only)
 
 Hook environment:
-  DOTTY_REPO_DIR   Absolute path to the repo being processed
-  DOTTY_ENV        Detected environment (empty if none)
-  DOTTY_COMMAND    Command that invoked the hook (install, update, or sync)
-  DOTTY_VERBOSE    "true" when -v/--verbose is set
-  DOTTY_LIB        Path to hook utility library (source "$DOTTY_LIB")
+  DOTTY_REPO_DIR           Absolute path to the repo being processed
+  DOTTY_ENV                Detected environment (empty if none)
+  DOTTY_COMMAND            Command that invoked the hook (install, update, or sync)
+  DOTTY_VERBOSE            "true" when -v/--verbose is set
+  DOTTY_LIB                Path to hook utility library (source "$DOTTY_LIB")
 
 Guard:
-  DOTTY_GUARD_PATTERNS   Newline-separated patterns to block in commits
+  DOTTY_GUARD_PATTERNS     Newline-separated patterns to block in commits
 
 General:
-  DOTTY_DIR        Base directory for dotty state (default: ~/.dotty)
+  DOTTY_DIR                Base directory for dotty state (default: ~/.dotty)
 EOF
 }
 
