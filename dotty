@@ -357,29 +357,6 @@ cmd_update() {
     success "Update complete!"
 }
 
-cmd_sync() {
-    local target="${1:-}"
-
-    registry_init
-
-    if [[ -n "$target" ]]; then
-        local path
-        path="$(registry_get "$target")"
-        [[ -n "$path" ]] || die "Unknown repo: $target"
-        [[ -d "$path" ]] || die "Repo directory not found: $path"
-
-        pull_if_clean "$path"
-
-        resolve_chain_from_leaf
-        run_chain "false" "sync"
-    else
-        resolve_chain_from_leaf
-        run_chain "true" "sync"
-    fi
-
-    success "Sync complete!"
-}
-
 cmd_link() {
     local target="${1:-}"
 
@@ -696,7 +673,6 @@ Usage: dotty [-v] <command> [args]
 Commands:
   install [url-or-path]    Resolve chain, clone deps, link files, run dotty-run.sh
   update [name]            Pull all repos (or one), re-link, re-run dotty-run.sh
-  sync [name]              Pull all repos (or one), re-link, re-run hooks (skip slow setup)
   add <file> [--repo X]    Move a dotfile into a repo and symlink it back
   link [name]              Re-create symlinks only (skip pull and hooks)
   status                   Show repos, chain order, and detected environment
@@ -713,7 +689,7 @@ Options:
 Hook environment:
   DOTTY_REPO_DIR           Absolute path to the repo being processed
   DOTTY_ENV                Detected environment (empty if none)
-  DOTTY_COMMAND            Command that invoked the hook (install, update, or sync)
+  DOTTY_COMMAND            Command that invoked the hook (install or update)
   DOTTY_VERBOSE            "true" when -v/--verbose is set
   DOTTY_LIB                Path to hook utility library (source "$DOTTY_LIB")
 
@@ -748,7 +724,6 @@ main() {
     case "$cmd" in
         install)      cmd_install "$@" ;;
         update)       cmd_update "$@" ;;
-        sync)         cmd_sync "$@" ;;
         add)          cmd_add "$@" ;;
         link)         cmd_link "$@" ;;
         status)       cmd_status "$@" ;;

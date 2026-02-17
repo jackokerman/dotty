@@ -16,7 +16,6 @@ _dotty() {
     local -a commands=(
         'install:Resolve chain, clone deps, link files, run hooks'
         'update:Pull repos, re-link, re-run hooks'
-        'sync:Pull repos and re-link (lightweight hooks)'
         'add:Move a dotfile into a repo and symlink it back'
         'link:Re-create symlinks only'
         'status:Show repos, chain, and detected environment'
@@ -37,7 +36,7 @@ _dotty() {
         install)
             _files -/
             ;;
-        update|sync|link|unregister)
+        update|link|unregister)
             _dotty_registry_names
             ;;
         add)

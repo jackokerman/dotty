@@ -23,7 +23,7 @@ The `dotty` script is structured as a monolithic bash program with procedural se
 
 **Key flow (`install`):** resolve source → resolve dependency chain → register all repos → for each repo: pull, symlink `home/`, apply environment overlay, run `dotty-run.sh` hook.
 
-**Hook environment variables:** `DOTTY_REPO_DIR` (repo path), `DOTTY_ENV` (detected environment), `DOTTY_COMMAND` (`install`, `update`, or `link`). Hooks are skipped during `link`.
+**Hook environment variables:** `DOTTY_REPO_DIR` (repo path), `DOTTY_ENV` (detected environment), `DOTTY_COMMAND` (`install` or `update`). Hooks are skipped during `link`.
 
 **Directory merging:** when linking directories, dotty recurses into them and symlinks individual files rather than replacing the whole directory. If a directory symlink already points elsewhere, it "explodes" it into a real directory with child symlinks to preserve both sources.
 
