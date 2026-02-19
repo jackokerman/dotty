@@ -63,6 +63,10 @@ DOTTY_ENV_DETECT='
     echo "laptop"
   fi
 '
+
+# Optional: paths (relative to home/) that dotty should not symlink.
+# Useful when a hook needs full control over a file (e.g., merging JSON).
+DOTTY_LINK_IGNORE=(".claude/settings.json")
 ```
 
 | Field | Type | Required | Description |
@@ -71,6 +75,7 @@ DOTTY_ENV_DETECT='
 | `DOTTY_EXTENDS` | bash array | yes (empty OK) | Git URLs of parent repos |
 | `DOTTY_ENVIRONMENTS` | bash array | no | Environment names this repo supports |
 | `DOTTY_ENV_DETECT` | string | no | Bash snippet that echoes detected environment |
+| `DOTTY_LINK_IGNORE` | bash array | no | Paths (relative to `home/`) to skip during symlinking |
 
 ### Directory layout
 

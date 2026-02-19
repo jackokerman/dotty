@@ -51,6 +51,15 @@ should_exclude() {
     return 1
 }
 
+_is_link_ignored() {
+    local rel_path="$1"
+    [[ -z "${DOTTY_LINK_IGNORE+x}" || ${#DOTTY_LINK_IGNORE[@]} -eq 0 ]] && return 1
+    for pattern in "${DOTTY_LINK_IGNORE[@]}"; do
+        [[ "$rel_path" == "$pattern" ]] && return 0
+    done
+    return 1
+}
+
 create_symlink() {
     local source="$1"
     local target="$2"
@@ -115,6 +124,10 @@ _explode_dir_symlink() {
 _link_item() {
     local item="$1"
     local target_item="$2"
+    local rel_prefix="${3:-}"
+    local name
+    name="$(basename "$item")"
+    local rel_path="${rel_prefix:+$rel_prefix/}$name"
 
     if [[ -d "$item" ]]; then
         if [[ -L "$target_item" ]]; then
@@ -127,14 +140,14 @@ _link_item() {
                 fi
             elif [[ -d "$target_item" ]]; then
                 _explode_dir_symlink "$target_item"
-                create_symlinks_from_dir "$item" "$target_item"
+                create_symlinks_from_dir "$item" "$target_item" "$rel_path"
             else
                 info "Updating symlink: ~${target_item#"$HOME"}"
                 rm "$target_item"
                 create_symlink "$item" "$target_item"
             fi
         elif [[ -d "$target_item" ]]; then
-            create_symlinks_from_dir "$item" "$target_item"
+            create_symlinks_from_dir "$item" "$target_item" "$rel_path"
         else
             create_symlink "$item" "$target_item"
         fi
@@ -146,6 +159,7 @@ _link_item() {
 create_symlinks_from_dir() {
     local source_dir="$1"
     local target_dir="$2"
+    local rel_prefix="${3:-}"
 
     [[ -d "$source_dir" ]] || return 0
 
@@ -165,9 +179,12 @@ create_symlinks_from_dir() {
 
         should_exclude "$name" && continue
 
+        local rel_path="${rel_prefix:+$rel_prefix/}$name"
+        _is_link_ignored "$rel_path" && continue
+
         local target_item="$target_dir/$name"
 
-        _link_item "$item" "$target_item"
+        _link_item "$item" "$target_item" "$rel_prefix"
     done
 
     # Also handle hidden files (dotfiles within home/)
@@ -178,8 +195,11 @@ create_symlinks_from_dir() {
         [[ "$name" == "." || "$name" == ".." ]] && continue
         should_exclude "$name" && continue
 
+        local rel_path="${rel_prefix:+$rel_prefix/}$name"
+        _is_link_ignored "$rel_path" && continue
+
         local target_item="$target_dir/$name"
-        _link_item "$item" "$target_item"
+        _link_item "$item" "$target_item" "$rel_prefix"
     done
 
     _LINK_DEPTH=$((_LINK_DEPTH - 1))

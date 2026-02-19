@@ -64,6 +64,7 @@ read_config() {
     DOTTY_EXTENDS=()
     DOTTY_ENVIRONMENTS=()
     DOTTY_ENV_DETECT=""
+    DOTTY_LINK_IGNORE=()
 
     # shellcheck disable=SC1090
     source "$conf"
