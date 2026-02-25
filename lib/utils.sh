@@ -60,6 +60,54 @@ _is_link_ignored() {
     return 1
 }
 
+# Remove symlinks in target_dir that point into source_dir but whose source
+# no longer exists. Scans target_dir's top-level entries for symlinks pointing
+# into source_dir, and for real directories, recurses only into subdirectories
+# where the corresponding source directory also exists (meaning dotty might
+# have linked individual files inside).
+_ORPHAN_COUNT=0
+
+_cleanup_orphans_in() {
+    local source_dir="$1"
+    local target_dir="$2"
+
+    [[ -d "$target_dir" ]] || return 0
+
+    local item
+    for item in "$target_dir"/* "$target_dir"/.*; do
+        [[ -e "$item" || -L "$item" ]] || continue
+        local name
+        name="$(basename "$item")"
+        [[ "$name" == "." || "$name" == ".." ]] && continue
+
+        if [[ -L "$item" ]]; then
+            local link_target
+            link_target="$(readlink "$item")"
+            if [[ "$link_target" == "$source_dir"/* || "$link_target" == "$source_dir" ]]; then
+                if [[ ! -e "$item" ]]; then
+                    rm "$item"
+                    verbose_info "Removed orphan: ~${item#"$HOME"}"
+                    _ORPHAN_COUNT=$((_ORPHAN_COUNT + 1))
+                fi
+            fi
+        elif [[ -d "$item" && ! -L "$item" && -d "$source_dir/$name" ]]; then
+            # Recurse into real dirs that have a corresponding source directory
+            _cleanup_orphans_in "$source_dir/$name" "$item"
+        fi
+    done
+}
+
+cleanup_orphans() {
+    local source_dir="$1"
+    local target_dir="$2"
+
+    _ORPHAN_COUNT=0
+    _cleanup_orphans_in "$source_dir" "$target_dir"
+    if [[ $_ORPHAN_COUNT -gt 0 ]]; then
+        info "Removed $_ORPHAN_COUNT orphan symlink(s)"
+    fi
+}
+
 create_symlink() {
     local source="$1"
     local target="$2"

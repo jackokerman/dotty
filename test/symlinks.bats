@@ -229,3 +229,87 @@ teardown() {
     [[ -L "$TEST_HOME/.config/app/settings.txt" ]]
     [[ "$(readlink "$TEST_HOME/.config/app/settings.txt")" == "$overlay_dir/home/.config/app/settings.txt" ]]
 }
+
+# --- cleanup_orphans ---
+
+@test "cleanup_orphans removes dangling symlink pointing into repo" {
+    create_test_repo "test-repo"
+    local repo_dir="$REPLY"
+
+    add_repo_file "$repo_dir" ".bashrc" "# bashrc"
+    add_repo_file "$repo_dir" ".vimrc" "set nocompatible"
+
+    create_symlinks_from_dir "$repo_dir/home" "$TEST_HOME"
+    [[ -L "$TEST_HOME/.bashrc" ]]
+    [[ -L "$TEST_HOME/.vimrc" ]]
+
+    # Remove the source file (simulating a file removed from the repo)
+    rm "$repo_dir/home/.vimrc"
+
+    cleanup_orphans "$repo_dir/home" "$TEST_HOME"
+
+    # .vimrc should be removed (orphan), .bashrc should remain
+    [[ ! -L "$TEST_HOME/.vimrc" ]]
+    [[ -L "$TEST_HOME/.bashrc" ]]
+}
+
+@test "cleanup_orphans ignores symlinks pointing to other repos" {
+    create_test_repo "repo-a"
+    local repo_a="$REPLY"
+    add_repo_file "$repo_a" ".bashrc" "# from a"
+
+    create_test_repo "repo-b"
+    local repo_b="$REPLY"
+    add_repo_file "$repo_b" ".vimrc" "# from b"
+
+    create_symlinks_from_dir "$repo_a/home" "$TEST_HOME"
+    create_symlinks_from_dir "$repo_b/home" "$TEST_HOME"
+
+    # Remove source from repo-a
+    rm "$repo_a/home/.bashrc"
+
+    # Only clean orphans for repo-b (should not touch repo-a's dangling link)
+    cleanup_orphans "$repo_b/home" "$TEST_HOME"
+
+    # repo-a's orphan should still exist (we didn't clean repo-a)
+    [[ -L "$TEST_HOME/.bashrc" ]]
+    [[ -L "$TEST_HOME/.vimrc" ]]
+}
+
+@test "cleanup_orphans recurses into real directories" {
+    create_test_repo "test-repo"
+    local repo_dir="$REPLY"
+
+    add_repo_file "$repo_dir" ".config/app/settings.txt" "settings"
+    add_repo_file "$repo_dir" ".config/app/other.txt" "other"
+
+    # Pre-create target dirs so dotty recurses
+    mkdir -p "$TEST_HOME/.config/app"
+
+    create_symlinks_from_dir "$repo_dir/home" "$TEST_HOME"
+    [[ -L "$TEST_HOME/.config/app/settings.txt" ]]
+    [[ -L "$TEST_HOME/.config/app/other.txt" ]]
+
+    # Remove one source file
+    rm "$repo_dir/home/.config/app/settings.txt"
+
+    cleanup_orphans "$repo_dir/home" "$TEST_HOME"
+
+    [[ ! -L "$TEST_HOME/.config/app/settings.txt" ]]
+    [[ -L "$TEST_HOME/.config/app/other.txt" ]]
+}
+
+@test "cleanup_orphans is a no-op when nothing is orphaned" {
+    create_test_repo "test-repo"
+    local repo_dir="$REPLY"
+
+    add_repo_file "$repo_dir" ".bashrc" "# bashrc"
+
+    create_symlinks_from_dir "$repo_dir/home" "$TEST_HOME"
+
+    run cleanup_orphans "$repo_dir/home" "$TEST_HOME"
+    [[ "$status" -eq 0 ]]
+    # Should not print anything about removing orphans
+    [[ "$output" != *"orphan"* ]]
+    [[ -L "$TEST_HOME/.bashrc" ]]
+}

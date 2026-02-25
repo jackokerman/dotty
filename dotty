@@ -245,6 +245,14 @@ process_repo() {
 
     title "Processing $name"
 
+    # Clean up orphan symlinks (files removed from repo since last link)
+    if [[ -d "$repo_dir/home" ]]; then
+        cleanup_orphans "$repo_dir/home" "$HOME"
+    fi
+    if [[ -n "$env" && -d "$repo_dir/$env/home" ]]; then
+        cleanup_orphans "$repo_dir/$env/home" "$HOME"
+    fi
+
     # Symlink home/ → $HOME
     if [[ -d "$repo_dir/home" ]]; then
         info "Linking home/"
