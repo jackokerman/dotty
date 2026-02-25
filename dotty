@@ -22,7 +22,9 @@ registry_init() {
 
 registry_get() {
     local name="$1"
-    grep -m1 "^${name}=" "$DOTTY_REGISTRY" 2>/dev/null | cut -d= -f2-
+    local line
+    line="$(grep -m1 "^${name}=" "$DOTTY_REGISTRY" 2>/dev/null)" || return 1
+    echo "${line#*=}"
 }
 
 registry_set() {
@@ -86,7 +88,12 @@ resolve_chain() {
     local name="$DOTTY_NAME"
     local -a extends=("${DOTTY_EXTENDS[@]}")
 
-    # Cycle detection
+    # Skip if already resolved (diamond dependency deduplication)
+    for existing in "${CHAIN_NAMES[@]}"; do
+        [[ "$existing" == "$name" ]] && return 0
+    done
+
+    # Cycle detection (only tracks the current recursion stack)
     for r in "${_RESOLVING[@]}"; do
         [[ "$r" == "$name" ]] && die "Dependency cycle detected: $name"
     done
@@ -99,10 +106,8 @@ resolve_chain() {
         resolve_chain "$parent_dir"
     done
 
-    # Add self (skip if already in chain, e.g. diamond dependency)
-    for existing in "${CHAIN_NAMES[@]}"; do
-        [[ "$existing" == "$name" ]] && return 0
-    done
+    # Pop self from the resolving stack
+    unset '_RESOLVING[${#_RESOLVING[@]}-1]'
 
     CHAIN_NAMES+=("$name")
     CHAIN_PATHS+=("$repo_dir")
@@ -148,7 +153,7 @@ ensure_repo() {
     local url_basename
     url_basename="$(basename "$source" .git)"
     local registered_path
-    registered_path="$(registry_get "$url_basename")"
+    registered_path="$(registry_get "$url_basename")" || true
     if [[ -n "$registered_path" && -d "$registered_path" && -f "$registered_path/dotty.conf" ]]; then
         echo "$registered_path"
         return 0
@@ -162,7 +167,7 @@ ensure_repo() {
             found_name="$(DOTTY_NAME=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); DOTTY_ENV_DETECT=""; source "$dir/dotty.conf"; echo "$DOTTY_NAME")"
             if [[ -n "$found_name" ]]; then
                 local found_path
-                found_path="$(registry_get "$found_name")"
+                found_path="$(registry_get "$found_name")" || true
                 if [[ -n "$found_path" && -d "$found_path" ]]; then
                     echo "$found_path"
                     return 0
@@ -341,7 +346,7 @@ cmd_update() {
     if [[ -n "$target" ]]; then
         # Update a single repo, but re-run full chain
         local path
-        path="$(registry_get "$target")"
+        path="$(registry_get "$target")" || true
         [[ -n "$path" ]] || die "Unknown repo: $target"
         [[ -d "$path" ]] || die "Repo directory not found: $path"
 
@@ -365,7 +370,7 @@ cmd_link() {
 
     if [[ -n "$target" ]]; then
         local path
-        path="$(registry_get "$target")"
+        path="$(registry_get "$target")" || true
         [[ -n "$path" ]] || die "Unknown repo: $target"
 
         CHAIN_NAMES=()
@@ -421,7 +426,7 @@ cmd_add() {
 
     local repo_path=""
     if [[ -n "$repo_name" ]]; then
-        repo_path="$(registry_get "$repo_name")"
+        repo_path="$(registry_get "$repo_name")" || true
         [[ -n "$repo_path" ]] || die "Unknown repo: $repo_name"
     else
         local count
@@ -556,7 +561,7 @@ cmd_unregister() {
     registry_init
 
     local path
-    path="$(registry_get "$name")"
+    path="$(registry_get "$name")" || true
     [[ -n "$path" ]] || die "Unknown repo: $name"
 
     registry_remove "$name"
