@@ -93,7 +93,7 @@ Scan each registered repo for files that reference dotty and verify they still m
 - **`dotty-run.sh` hooks** — env var usage (`DOTTY_REPO_DIR`, `DOTTY_ENV`, `DOTTY_COMMAND`, `DOTTY_LIB`) and any calls to utility library functions.
 - **Shell config files** (`.zshenv.local`, `.zshrc.local`, etc.) — references to `DOTTY_ENV`, `DOTTY_GUARD_PATTERNS`, or other dotty variables.
 - **`install.sh` scripts** — bootstrap logic that clones or invokes dotty.
-- **Scripts that source `$DOTTY_LIB`** — any script using dotty's utility library for logging, symlinks, or JSON merging.
+- **Scripts that source `$DOTTY_LIB`** — any script using dotty's utility library for logging and symlinks.
 
 ### What triggers downstream updates
 
