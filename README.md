@@ -440,6 +440,27 @@ Dotty stores everything in `~/.dotty/`:
 
 When dotty creates a symlink where a real file already exists, it moves the original to `~/.dotty/backups/` (preserving the path structure) before linking.
 
+## Testing
+
+Tests use [bats-core](https://github.com/bats-core/bats-core), which is included as a git submodule at `test/bats/`. No installation needed beyond initializing submodules.
+
+```bash
+git submodule update --init   # first time only
+./test/bats/bin/bats test/    # run all tests
+./test/bats/bin/bats test/symlinks.bats  # run a single file
+```
+
+Each test gets a fully isolated environment with a temporary `$HOME`, registry, and repo directory, so nothing touches your real dotfiles. The test files are:
+
+- `registry.bats` — registry CRUD
+- `symlinks.bats` — symlink creation, directory merging, orphan cleanup
+- `chain.bats` — chain resolution, cycle detection, environment detection
+- `dry_run.bats` — dry-run mode
+- `trace.bats` — symlink provenance tracing
+- `files.bats` — file listing and status
+- `uninstall.bats` — repo uninstallation and backup restore
+- `migrate.bats` — `.dotty/` directory layout helpers
+
 ## Migrating from a manual install script
 
 If you already have dotfiles with an `install.sh`, you can adopt dotty incrementally. Create a `.dotty/config` in your repo, add a `.dotty/run.sh` with your post-link setup logic, and update your `install.sh` to delegate to dotty when it's available:
