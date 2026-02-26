@@ -700,6 +700,80 @@ cmd_unguard() {
     success "Guard hook removed from $target"
 }
 
+cmd_trace() {
+    local target="${1:-}"
+    [[ -n "$target" ]] || die "Usage: dotty trace <path>"
+
+    registry_init
+
+    # Expand ~ and resolve to absolute path (but don't follow symlinks yet)
+    if [[ "$target" == "~/"* ]]; then
+        target="$HOME/${target#\~/}"
+    fi
+    if [[ "$target" != /* ]]; then
+        target="$(pwd)/$target"
+    fi
+
+    if [[ ! -e "$target" && ! -L "$target" ]]; then
+        die "Path does not exist: $target"
+    fi
+
+    local display="~${target#"$HOME"}"
+
+    if [[ ! -L "$target" ]]; then
+        # Not a symlink — check if it's a directory with dotty-managed contents
+        if [[ -d "$target" ]]; then
+            local found=0
+            local item
+            for item in "$target"/* "$target"/.*; do
+                [[ -e "$item" || -L "$item" ]] || continue
+                local iname
+                iname="$(basename "$item")"
+                [[ "$iname" == "." || "$iname" == ".." ]] && continue
+                [[ -L "$item" ]] || continue
+
+                local link_target
+                link_target="$(readlink "$item")"
+
+                while IFS='=' read -r name rpath; do
+                    [[ -n "$name" ]] || continue
+                    if [[ "$link_target" == "$rpath/home/"* || "$link_target" == "$rpath/"*/home/* ]]; then
+                        local rel="${link_target#"$rpath"/}"
+                        echo -e "  ~${item#"$HOME"}  →  ${COLOR_GREEN}$name${COLOR_NONE} ($rel)"
+                        found=$((found + 1))
+                    fi
+                done < "$DOTTY_REGISTRY"
+            done
+            if [[ $found -eq 0 ]]; then
+                info "$display is a directory not managed by dotty"
+            fi
+        else
+            info "$display is not a symlink (not managed by dotty)"
+        fi
+        return 0
+    fi
+
+    # It's a symlink — resolve and match against repos
+    local link_target
+    link_target="$(readlink "$target")"
+
+    local matched=0
+    while IFS='=' read -r name rpath; do
+        [[ -n "$name" ]] || continue
+        if [[ "$link_target" == "$rpath/home/"* || "$link_target" == "$rpath/"*/home/* ]]; then
+            local rel="${link_target#"$rpath"/}"
+            echo -e "$display  →  ${COLOR_GREEN}$name${COLOR_NONE} ($rel)"
+            matched=1
+            break
+        fi
+    done < "$DOTTY_REGISTRY"
+
+    if [[ $matched -eq 0 ]]; then
+        # Symlink exists but doesn't point into any registered repo
+        info "$display → $link_target (not managed by dotty)"
+    fi
+}
+
 cmd_help() {
     cat <<'EOF'
 dotty - a dotfiles manager with overlay semantics
@@ -714,6 +788,7 @@ Commands:
   status                   Show repos, chain order, and detected environment
   register <path> [name]   Register an already-cloned repo
   unregister <name>        Remove a repo from the registry
+  trace <path>             Show which repo a file or directory comes from
   guard [path]             Install pre-commit hook to block sensitive content
   unguard [path]           Remove the dotty pre-commit hook
   help                     Show this help
@@ -768,6 +843,7 @@ main() {
         status)       cmd_status "$@" ;;
         register)     cmd_register "$@" ;;
         unregister)   cmd_unregister "$@" ;;
+        trace)        cmd_trace "$@" ;;
         guard)        cmd_guard "$@" ;;
         unguard)      cmd_unguard "$@" ;;
         help|--help)  cmd_help ;;

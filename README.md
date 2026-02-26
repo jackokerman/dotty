@@ -212,6 +212,21 @@ dotty status
   ● work-dotfiles (/home/you/work-dotfiles) [modified]
 ```
 
+### `dotty trace <path>`
+
+Shows which repo a file or directory comes from. Useful for debugging your chain when you're not sure which repo is providing a particular config file.
+
+For a symlink, it shows the source repo and relative path. For an exploded directory (a real directory containing symlinks from multiple repos), it lists each managed file and its source repo.
+
+```bash
+dotty trace ~/.config/ghostty
+# ~/.config/ghostty  →  dotfiles (home/.config/ghostty)
+
+dotty trace ~/.config/git
+# ~/.config/git/config  →  dotfiles (home/.config/git/config)
+# ~/.config/git/ignore  →  work-dotfiles (home/.config/git/ignore)
+```
+
 ### `dotty register <path> [name]`
 
 Register an already-cloned repo without running install. The name is read from `dotty.conf` if not provided.

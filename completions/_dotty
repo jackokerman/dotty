@@ -21,6 +21,7 @@ _dotty() {
         'status:Show repos, chain order, and detected environment'
         'register:Register an already-cloned repo'
         'unregister:Remove a repo from the registry'
+        'trace:Show which repo a file or directory comes from'
         'guard:Install pre-commit hook to block sensitive content'
         'unguard:Remove the dotty pre-commit hook'
         'help:Show help'
@@ -61,6 +62,9 @@ _dotty() {
             if (( CURRENT == 3 )); then
                 _files -/
             fi
+            ;;
+        trace)
+            _files
             ;;
         guard|unguard)
             _files -/
