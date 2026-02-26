@@ -85,8 +85,12 @@ _cleanup_orphans_in() {
             link_target="$(readlink "$item")"
             if [[ "$link_target" == "$source_dir"/* || "$link_target" == "$source_dir" ]]; then
                 if [[ ! -e "$item" ]]; then
-                    rm "$item"
-                    verbose_info "Removed orphan: ~${item#"$HOME"}"
+                    if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+                        info "[dry-run] Would remove orphan: ~${item#"$HOME"}"
+                    else
+                        rm "$item"
+                        verbose_info "Removed orphan: ~${item#"$HOME"}"
+                    fi
                     _ORPHAN_COUNT=$((_ORPHAN_COUNT + 1))
                 fi
             fi
@@ -122,15 +126,26 @@ create_symlink() {
             fi
             return 0
         else
+            if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+                info "[dry-run] Would update: ~${target#"$HOME"}"
+                return 0
+            fi
             info "Updating symlink: ~${target#"$HOME"}"
             rm "$target"
         fi
     elif [[ -e "$target" ]]; then
+        if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+            info "[dry-run] Would backup and link: ~${target#"$HOME"}"
+            return 0
+        fi
         local rel="${target#"$HOME"/}"
         local backup="$DOTTY_BACKUPS_DIR/$rel"
         mkdir -p "$(dirname "$backup")"
         mv "$target" "$backup"
         warning "Backed up ~${target#"$HOME"} → ~/.dotty/backups/$rel"
+    elif [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+        info "[dry-run] Would link: ~${target#"$HOME"}"
+        return 0
     fi
 
     if ln -s "$source" "$target"; then
