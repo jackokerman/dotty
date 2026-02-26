@@ -196,7 +196,7 @@ If `--repo` is omitted and multiple repos are registered, dotty prompts you to p
 
 ### `dotty link [name]`
 
-Re-creates symlinks without pulling repos or running hooks. Useful when you've manually edited files and want to refresh the links.
+Re-creates symlinks without pulling repos or running hooks. Useful when you've manually edited files and want to refresh the links. Also cleans up orphan symlinks (dangling links where the source file has been removed from a repo).
 
 ### `dotty status`
 
@@ -219,6 +219,19 @@ Register an already-cloned repo without running install. The name is read from `
 ### `dotty unregister <name>`
 
 Remove a repo from the registry. This doesn't delete the repo or its symlinks.
+
+### Options
+
+All options can be placed before or after the command name.
+
+`-v`, `--verbose` — Show per-file messages instead of just summary counts. Useful for debugging which files are being linked, skipped, or cleaned up.
+
+`-n`, `--dry-run` — Preview what would change without modifying the filesystem. Shows symlinks that would be created, updated, or removed (orphan cleanup). Hooks and git pulls are skipped entirely.
+
+```bash
+dotty --dry-run link      # see what link would do
+dotty -n install           # preview a full install cycle
+```
 
 ## Hooks
 
@@ -382,6 +395,10 @@ Machines without dotty keep working. As you install dotty on each machine, they 
 
 **Symlink conflicts** — If a real file exists where dotty wants to create a symlink, it backs up the file to `~/.dotty/backups/` and creates the link. Check backups if something goes missing.
 
+**Broken symlinks after removing files from a repo** — Dotty automatically cleans up orphan symlinks (dangling links whose source was removed) during `link`, `install`, and `update`. If you see a summary like "Removed 2 orphan symlink(s)", that's dotty housekeeping. Use `--verbose` to see which files were cleaned up, or `--dry-run` to preview without removing anything.
+
 **Broken symlinks after moving repos** — Run `dotty link` to recreate all symlinks. If you've moved a repo, re-register it with `dotty register /new/path`.
 
 **Chain resolution fails** — Make sure parent repos are accessible (can be cloned or are already registered). Use `dotty status` to see the current state.
+
+**Error summary after processing** — If hooks fail or symlinks can't be created, dotty continues processing all repos and prints a summary at the end (e.g., "Hook failures: my-repo" or "3 symlink(s) failed to create"). All repos still get processed even when individual steps fail.
