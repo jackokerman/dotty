@@ -17,8 +17,8 @@ _dotty() {
         'install:Resolve chain, clone deps, link files, run hooks'
         'update:Pull repos, re-link, re-run hooks'
         'add:Move a dotfile into a repo and symlink it back'
-        'link:Re-create symlinks only'
-        'status:Show repos, chain, and detected environment'
+        'link:Re-create symlinks only (skip pull and hooks)'
+        'status:Show repos, chain order, and detected environment'
         'register:Register an already-cloned repo'
         'unregister:Remove a repo from the registry'
         'guard:Install pre-commit hook to block sensitive content'
@@ -27,8 +27,16 @@ _dotty() {
         'version:Show version'
     )
 
+    local -a global_opts=(
+        '-v[Show per-file messages]'
+        '--verbose[Show per-file messages]'
+        '-n[Preview changes without modifying the filesystem]'
+        '--dry-run[Preview changes without modifying the filesystem]'
+    )
+
     if (( CURRENT == 2 )); then
         _describe -t commands 'dotty command' commands
+        _arguments -s $global_opts
         return
     fi
 
