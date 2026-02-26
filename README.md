@@ -200,7 +200,7 @@ Re-creates symlinks without pulling repos or running hooks. Useful when you've m
 
 ### `dotty status`
 
-Shows registered repos, the resolved chain order, detected environment, and git status of each repo.
+Shows registered repos, the resolved chain order, detected environment, git status, and symlink health for each repo. The link counts show how many files are linked, overridden by a later repo, or unlinked (e.g., excluded via `DOTTY_LINK_IGNORE`).
 
 ```
 dotty status
@@ -208,8 +208,8 @@ dotty status
   Chain: dotfiles → work-dotfiles
   Env:   laptop
 
-  ✓ dotfiles (/home/you/dotfiles) [clean]
-  ● work-dotfiles (/home/you/work-dotfiles) [modified]
+  ✓ dotfiles (/home/you/dotfiles) [clean] [32 linked, 1 unlinked]
+  ● work-dotfiles (/home/you/work-dotfiles) [modified] [15 linked]
 ```
 
 ### `dotty files [repo]`

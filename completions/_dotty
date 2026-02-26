@@ -18,7 +18,7 @@ _dotty() {
         'update:Pull repos, re-link, re-run hooks'
         'add:Move a dotfile into a repo and symlink it back'
         'link:Re-create symlinks only (skip pull and hooks)'
-        'status:Show repos, chain order, and detected environment'
+        'status:Show repos, chain order, environment, and link health'
         'register:Register an already-cloned repo'
         'unregister:Remove a repo from the registry'
         'files:List all managed files, grouped by repo'

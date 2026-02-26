@@ -559,7 +559,30 @@ cmd_status() {
             status_text="missing"
         fi
 
-        echo -e "  $status_icon $name ${COLOR_DIM}($rpath) [$status_text]${COLOR_NONE}"
+        # Count symlink health
+        local linked=0 overridden=0 not_linked=0
+        _FILE_LINES=()
+        _files_walk "$rpath/home" "" "$name"
+        if [[ -n "$env" && -d "$rpath/$env/home" ]]; then
+            _files_walk "$rpath/$env/home" "" "$name"
+        fi
+        for fl in "${_FILE_LINES[@]}"; do
+            case "${fl%%|*}" in
+                linked)     linked=$((linked + 1)) ;;
+                overridden) overridden=$((overridden + 1)) ;;
+                not_linked) not_linked=$((not_linked + 1)) ;;
+            esac
+        done
+
+        local link_summary="${linked} linked"
+        if [[ $overridden -gt 0 ]]; then
+            link_summary+=", ${overridden} overridden"
+        fi
+        if [[ $not_linked -gt 0 ]]; then
+            link_summary+=", ${not_linked} unlinked"
+        fi
+
+        echo -e "  $status_icon $name ${COLOR_DIM}($rpath) [$status_text] [$link_summary]${COLOR_NONE}"
     done
 }
 
@@ -931,7 +954,7 @@ Commands:
   update [name]            Pull all repos (or one), re-link, re-run dotty-run.sh
   add <file> [--repo X]    Move a dotfile into a repo and symlink it back
   link [name]              Re-create symlinks only (skip pull and hooks)
-  status                   Show repos, chain order, and detected environment
+  status                   Show repos, chain order, environment, and link health
   register <path> [name]   Register an already-cloned repo
   unregister <name>        Remove a repo from the registry
   files [repo]             List all managed files, grouped by repo
