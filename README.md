@@ -39,7 +39,20 @@ If your repo declares dependencies via `DOTTY_EXTENDS`, dotty resolves the full 
 
 **Directory merging.** When two repos both contribute to `~/.config/`, dotty doesn't clobber one with the other. It recurses into the directory and symlinks individual items, so both repos can coexist.
 
-**Incremental adoption.** You don't have to rewrite your dotfiles to use dotty. Add a `dotty.conf`, and your existing repo works. Machines without dotty keep using your old install script.
+**Incremental adoption.** You don't have to rewrite your dotfiles to use dotty. Add a `.dotty/config`, and your existing repo works. Machines without dotty keep using your old install script.
+
+### How it compares
+
+| | dotty | stow | chezmoi | yadm |
+|---|---|---|---|---|
+| Dependencies | bash, git | perl | go binary | bash, git |
+| Multi-repo chains | ✓ | — | — | — |
+| Environment overlays | ✓ | — | ✓ (templates) | ✓ (alternates) |
+| Directory merging | ✓ | ✓ | — | — |
+| Hooks | ✓ | — | ✓ | — |
+| Templates/encryption | — | — | ✓ | ✓ |
+
+Stow is a general-purpose symlink manager, not dotfiles-specific. Chezmoi and yadm are full-featured but assume a single-repo model. Dotty's niche is the multi-repo overlay: you keep personal and work config in separate repos and dotty merges them at the filesystem level.
 
 ## Setting up your dotfiles repo
 
@@ -126,27 +139,69 @@ Running `dotty install ~/work-dotfiles` kicks off the following:
 5. Symlinks `work-dotfiles/home/` into `$HOME` (overlay, wins on conflicts)
 6. Runs `work-dotfiles/.dotty/run.sh`
 
+### Directory merging
+
+When two repos contribute files to the same directory, dotty doesn't replace the directory wholesale. It recurses into it and symlinks individual files, so both repos coexist.
+
+Say your personal dotfiles have `home/.config/git/config` and your work dotfiles have `home/.config/git/ignore`:
+
+```
+dotfiles/home/               work-dotfiles/home/
+└── .config/git/             └── .config/git/
+    └── config                   └── ignore
+```
+
+After `dotty install`, `~/.config/git/` is a real directory containing symlinks to both repos:
+
+```
+~/.config/git/
+├── config → ~/dotfiles/home/.config/git/config
+└── ignore → ~/work-dotfiles/home/.config/git/ignore
+```
+
+If `~/.config/git/` was already a symlink (pointing to one repo's directory), dotty "explodes" it into a real directory and re-creates individual file symlinks. This happens automatically.
+
 ### Composition patterns
 
 Dotty supports three complementary patterns for managing config across repos. It directly handles the first one; the other two live in your dotfiles.
 
 **Override** is what dotty does natively. Later repos in the chain replace symlinks from earlier repos. If both `dotfiles/home/.gitconfig` and `work-dotfiles/home/.gitconfig` exist, the work version wins.
 
-**Extend** is a convention in your shell config. Base configs source `.local` files that child repos provide:
+**Extend** is a convention in your dotfiles. Base configs source `.local` files that overlay repos provide. Your base defines the structure and each layer adds to it through well-defined extension points.
 
-```
-~/.zshrc (from personal) → sources ~/.zshrc.local (from work)
-~/.gitconfig (from personal) → includes ~/.gitconfig.local (from work)
-```
-
-This is the right approach for most shell config. Your base `.zshrc` defines the structure and each layer adds to it through well-defined extension points.
-
-**Merge** is for structured data like JSON. Hooks can use tools like `jq` to combine configs:
+For shell configs:
 
 ```bash
-# In dotty-run.sh
-jq -s '.[0] * .[1]' "$target/settings.json" "$DOTTY_REPO_DIR/settings.json" > tmp && mv tmp "$target/settings.json"
+# In your base .zshrc (personal dotfiles)
+[[ -f "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
 ```
+
+For git, use `[include]`:
+
+```gitconfig
+# In your base .gitconfig (personal dotfiles)
+[include]
+    path = ~/.gitconfig.local
+```
+
+Your work repo provides `home/.zshrc.local` and `home/.gitconfig.local` with work-specific settings. This is the right approach for most config, since it composes cleanly across any number of repos.
+
+**Merge** is for structured data like JSON where you need to combine values from multiple repos rather than replacing the whole file. The approach is to keep the source file in `home/` for discoverability, exclude it from symlinking via `DOTTY_LINK_IGNORE`, and let a hook merge it into the target.
+
+```bash
+# .dotty/config
+DOTTY_LINK_IGNORE=(".config/app/settings.json")
+```
+
+```bash
+# .dotty/run.sh
+target="$HOME/.config/app/settings.json"
+source="$DOTTY_REPO_DIR/home/.config/app/settings.json"
+mkdir -p "$(dirname "$target")"
+jq -s '.[0] * .[1]' "$target" "$source" > "$target.tmp" && mv "$target.tmp" "$target"
+```
+
+The file lives in `home/` so it's easy to find and edit, but dotty skips it during symlinking because it needs to be a real file that accumulates merged content from each repo in the chain.
 
 ## Environments vs extends
 
@@ -275,7 +330,7 @@ dotty -n install           # preview a full install cycle
 
 ## Hooks
 
-If a repo has an executable hook script (`.dotty/run.sh` or `dotty-run.sh`), dotty runs it after creating symlinks during `install` and `update` (but not `link`). These environment variables are available:
+If a repo has an executable hook script at `.dotty/run.sh`, dotty runs it after creating symlinks during `install` and `update` (but not `link`). These environment variables are available:
 
 - `DOTTY_REPO_DIR` — absolute path to the repo
 - `DOTTY_ENV` — detected environment (empty if none)
@@ -428,6 +483,18 @@ fi
 ```
 
 Machines without dotty keep working. As you install dotty on each machine, they start using the new path.
+
+## Auto-sync on login
+
+If you want dotfiles to stay current on remote machines without remembering to run `dotty update`, add this to your `.zshrc` or `.bashrc`:
+
+```bash
+if command -v dotty >/dev/null 2>&1; then
+    (dotty update &>/dev/null &)
+fi
+```
+
+This runs `dotty update` in the background on every shell startup. It won't block your prompt and it's safe to run repeatedly since it's just `git pull` plus idempotent symlink creation.
 
 ## Troubleshooting
 
