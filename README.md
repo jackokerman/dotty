@@ -236,6 +236,18 @@ dotty trace ~/.config/git
 # ~/.config/git/ignore  →  work-dotfiles (home/.config/git/ignore)
 ```
 
+### `dotty uninstall <name>`
+
+Cleanly removes a repo by deleting its symlinks from `$HOME`, restoring any backed-up files, and unregistering it. This is the reverse of `install` for a single repo.
+
+```bash
+dotty uninstall work-dotfiles
+```
+
+Symlinks from other repos are left untouched. If dotty backed up a file when it originally created a symlink (stored in `~/.dotty/backups/`), the backup is restored to its original location.
+
+Supports `--dry-run` to preview what would be removed without making changes.
+
 ### `dotty register <path> [name]`
 
 Register an already-cloned repo without running install. The name is read from `dotty.conf` if not provided.

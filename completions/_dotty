@@ -18,6 +18,7 @@ _dotty() {
         'update:Pull repos, re-link, re-run hooks'
         'add:Move a dotfile into a repo and symlink it back'
         'link:Re-create symlinks only (skip pull and hooks)'
+        'uninstall:Remove a repo'\''s symlinks, restore backups, unregister'
         'status:Show repos, chain order, environment, and link health'
         'register:Register an already-cloned repo'
         'unregister:Remove a repo from the registry'
@@ -46,7 +47,7 @@ _dotty() {
         install)
             _files -/
             ;;
-        update|link|unregister|files)
+        update|link|uninstall|unregister|files)
             _dotty_registry_names
             ;;
         add)

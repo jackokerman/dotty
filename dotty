@@ -424,6 +424,55 @@ cmd_link() {
     fi
 }
 
+cmd_uninstall() {
+    local target_name="${1:-}"
+    [[ -n "$target_name" ]] || die "Usage: dotty uninstall <name>"
+
+    registry_init
+
+    local target_path
+    target_path="$(registry_get "$target_name")" || true
+    [[ -n "$target_path" ]] || die "Unknown repo: $target_name"
+
+    read_config "$target_path"
+
+    title "Uninstalling $target_name"
+
+    # Remove symlinks from home/
+    if [[ -d "$target_path/home" ]]; then
+        remove_repo_symlinks "$target_path/home" "$HOME"
+    fi
+
+    # Remove symlinks from environment overlay
+    local env=""
+    if [[ ${#CHAIN_PATHS[@]} -eq 0 ]]; then
+        # Resolve chain so we can detect environment
+        CHAIN_NAMES=()
+        CHAIN_PATHS=()
+        _RESOLVING=()
+        resolve_chain_from_leaf 2>/dev/null || true
+    fi
+    env="$(detect_environment 2>/dev/null)" || true
+    if [[ -n "$env" && -d "$target_path/$env/home" ]]; then
+        remove_repo_symlinks "$target_path/$env/home" "$HOME"
+    fi
+
+    local summary="${_UNLINK_COUNT} symlink(s) removed"
+    if [[ $_RESTORE_COUNT -gt 0 ]]; then
+        summary+=", ${_RESTORE_COUNT} file(s) restored from backup"
+    fi
+    info "$summary"
+
+    # Unregister
+    if [[ "${DOTTY_DRY_RUN:-false}" != "true" ]]; then
+        registry_remove "$target_name"
+    else
+        info "[dry-run] Would unregister $target_name"
+    fi
+
+    success "Uninstalled $target_name"
+}
+
 cmd_add() {
     local file=""
     local repo_name=""
@@ -954,6 +1003,7 @@ Commands:
   update [name]            Pull all repos (or one), re-link, re-run dotty-run.sh
   add <file> [--repo X]    Move a dotfile into a repo and symlink it back
   link [name]              Re-create symlinks only (skip pull and hooks)
+  uninstall <name>         Remove a repo's symlinks, restore backups, unregister
   status                   Show repos, chain order, environment, and link health
   register <path> [name]   Register an already-cloned repo
   unregister <name>        Remove a repo from the registry
@@ -1010,6 +1060,7 @@ main() {
         update)       cmd_update "$@" ;;
         add)          cmd_add "$@" ;;
         link)         cmd_link "$@" ;;
+        uninstall)    cmd_uninstall "$@" ;;
         status)       cmd_status "$@" ;;
         register)     cmd_register "$@" ;;
         unregister)   cmd_unregister "$@" ;;

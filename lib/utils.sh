@@ -113,6 +113,63 @@ cleanup_orphans() {
     fi
 }
 
+# Remove symlinks in target_dir that point into source_dir, and restore
+# backups where available. Used by uninstall to cleanly tear down a repo.
+_UNLINK_COUNT=0
+_RESTORE_COUNT=0
+
+_remove_repo_symlinks_in() {
+    local source_dir="$1"
+    local target_dir="$2"
+
+    [[ -d "$target_dir" ]] || return 0
+
+    local item
+    for item in "$target_dir"/* "$target_dir"/.*; do
+        [[ -e "$item" || -L "$item" ]] || continue
+        local name
+        name="$(basename "$item")"
+        [[ "$name" == "." || "$name" == ".." ]] && continue
+
+        if [[ -L "$item" ]]; then
+            local link_target
+            link_target="$(readlink "$item")"
+            if [[ "$link_target" == "$source_dir"/* || "$link_target" == "$source_dir" ]]; then
+                local rel="${item#"$HOME"/}"
+                local backup="$DOTTY_BACKUPS_DIR/$rel"
+                if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+                    if [[ -e "$backup" ]]; then
+                        info "[dry-run] Would restore: ~/$rel (from backup)"
+                    else
+                        info "[dry-run] Would remove: ~/$rel"
+                    fi
+                else
+                    rm "$item"
+                    if [[ -e "$backup" ]]; then
+                        mv "$backup" "$item"
+                        verbose_info "Restored: ~/$rel (from backup)"
+                        _RESTORE_COUNT=$((_RESTORE_COUNT + 1))
+                    else
+                        verbose_info "Removed: ~/$rel"
+                    fi
+                fi
+                _UNLINK_COUNT=$((_UNLINK_COUNT + 1))
+            fi
+        elif [[ -d "$item" && ! -L "$item" && -d "$source_dir/$name" ]]; then
+            _remove_repo_symlinks_in "$source_dir/$name" "$item"
+        fi
+    done
+}
+
+remove_repo_symlinks() {
+    local source_dir="$1"
+    local target_dir="$2"
+
+    _UNLINK_COUNT=0
+    _RESTORE_COUNT=0
+    _remove_repo_symlinks_in "$source_dir" "$target_dir"
+}
+
 create_symlink() {
     local source="$1"
     local target="$2"
