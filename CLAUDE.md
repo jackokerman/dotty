@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Dotty is a bash dotfiles manager with overlay semantics. It manages chains of dotfiles repositories where later repos override earlier ones, with support for environment-specific overlays, directory merging, and git-based dependency resolution.
 
-The entire tool is a single bash script (`dotty`, ~830 lines) plus an installer (`install.sh`). There is no build system, no external dependencies, and no test framework.
+The entire tool is a single bash script (`dotty`, ~830 lines) plus an installer (`install.sh`). There is no build system and no external dependencies beyond bash and git. Tests use [bats-core](https://github.com/bats-core/bats-core) (included as a git submodule at `test/bats/`).
 
 ## Architecture
 
@@ -61,7 +61,19 @@ Files in `repo/home/` are symlinked to `$HOME`. Environment overlays live in `re
 
 ## Testing changes
 
-After modifying `dotty` or `install.sh`, test against the user's actual dotfiles repos. Use `./dotty status` or read `~/.dotty/registry` to discover what's registered on this machine. Common test workflows:
+Run the automated test suite first:
+
+```bash
+./test/bats/bin/bats test/    # run all tests (38 tests across 4 files)
+```
+
+Tests use isolated temp directories and don't touch real dotfiles. Test files live in `test/`:
+- `registry.bats` — registry CRUD operations
+- `symlinks.bats` — symlink creation, directory merging, orphan cleanup
+- `chain.bats` — chain resolution, cycle detection, environment detection
+- `dry_run.bats` — dry-run mode for symlinks and orphan cleanup
+
+After tests pass, verify against the user's actual dotfiles repos. Use `./dotty status` or read `~/.dotty/registry` to discover what's registered on this machine. Common manual test workflows:
 
 ```bash
 ./dotty status    # see registered repos, chain order, environment
@@ -82,7 +94,13 @@ Run `dotty status` or read `~/.dotty/registry` to find all registered repos on t
 
 ### What to check in the dotty repo
 
-The `README.md` documents dotty's commands, configuration format, hook contract, and directory layout. When any of these change in the code, update the README to match. Check for changes to command behavior or flags, new or renamed environment variables, `dotty.conf` fields, hook execution semantics, and directory structure or state files.
+Three user-facing surfaces must stay in sync with the code:
+
+- **`cmd_help()` in `dotty`** — the help text shown by `dotty help`. Update when adding commands, flags, or environment variables.
+- **`completions/_dotty`** — zsh completions. Update when adding commands, subcommands, or flags.
+- **`README.md`** — full documentation of commands, configuration format, hook contract, directory layout, options, and troubleshooting. Update when any user-visible behavior changes.
+
+Check for changes to command behavior or flags, new or renamed environment variables, `dotty.conf` fields, hook execution semantics, and directory structure or state files.
 
 ### What to check in downstream repos
 
