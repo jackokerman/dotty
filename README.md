@@ -1,16 +1,12 @@
 # dotty
 
-Most dotfiles managers assume you can install whatever you want on your machine. But if you've ever set up a work laptop with strict software policies, or tried to share a config between your personal and work machines, you know that's not always the case.
+A dotfiles manager written in bash. No dependencies beyond `bash` and `git`.
 
-Dotty is a dotfiles manager written entirely in bash. No Ruby, no Python, no package manager required. If your machine has `bash` and `git`, you can use it. That makes it ideal for locked-down environments where you can't install tools freely, like a corporate laptop or a shared server.
-
-The real power is in how dotty handles multiple repos. You keep your personal dotfiles in one repo and your work-specific overrides in another. Dotty chains them together so that work config overlays on top of personal config, with later repos winning on conflicts. You get a clean separation between "my stuff" and "work stuff" without duplicating anything.
-
-It also supports environment-specific overlays within a single repo, so the same work dotfiles can behave differently on your laptop vs. a remote dev server.
+Dotty manages chains of dotfiles repositories where later repos override earlier ones. You keep personal dotfiles in one repo and work-specific overrides in another, and dotty layers them together with later repos winning on conflicts. It also supports environment-specific overlays within a single repo, so the same dotfiles can behave differently on your laptop vs. a remote dev server.
 
 ## Getting started
 
-The first thing you need to do is install dotty itself. It's a single script that lives at `~/.dotty/bin/dotty`.
+Install dotty itself first. It's a single script that lives at `~/.dotty/bin/dotty`.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jackokerman/dotty/main/install.sh | bash
@@ -27,32 +23,7 @@ dotty install ~/my-dotfiles
 dotty install https://github.com/you/dotfiles.git
 ```
 
-If your repo declares dependencies via `DOTTY_EXTENDS`, dotty resolves the full chain, clones anything missing, symlinks everything into `$HOME`, and runs install hooks. One command, fully set up.
-
-## Why dotty?
-
-**Pure bash.** No runtime dependencies beyond `bash` and `git`. Install it anywhere, including machines where you can't run `brew install` or `pip install`.
-
-**Multi-repo chains.** Keep personal and work dotfiles in separate repos. Dotty layers them on top of each other, with later repos overriding earlier ones. Your personal `.gitconfig` gets replaced by your work one, but your personal `.zshrc` stays intact.
-
-**Environment overlays.** A single repo can have different configs for different machines. Laptop gets macOS helpers, remote server gets Linux-specific config. Dotty detects the environment and applies the right overlay.
-
-**Directory merging.** When two repos both contribute to `~/.config/`, dotty doesn't clobber one with the other. It recurses into the directory and symlinks individual items, so both repos can coexist.
-
-**Incremental adoption.** You don't have to rewrite your dotfiles to use dotty. Add a `.dotty/config`, and your existing repo works. Machines without dotty keep using your old install script.
-
-### How it compares
-
-| | dotty | stow | chezmoi | yadm |
-|---|---|---|---|---|
-| Dependencies | bash, git | perl | go binary | bash, git |
-| Multi-repo chains | ✓ | — | — | — |
-| Environment overlays | ✓ | — | ✓ (templates) | ✓ (alternates) |
-| Directory merging | ✓ | ✓ | — | — |
-| Hooks | ✓ | — | ✓ | — |
-| Templates/encryption | — | — | ✓ | ✓ |
-
-Stow is a general-purpose symlink manager, not dotfiles-specific. Chezmoi and yadm are full-featured but assume a single-repo model. Dotty's niche is the multi-repo overlay: you keep personal and work config in separate repos and dotty merges them at the filesystem level.
+If your repo declares dependencies via `DOTTY_EXTENDS`, dotty resolves the full chain, clones anything missing, symlinks everything into `$HOME`, and runs install hooks.
 
 ## Setting up your dotfiles repo
 
