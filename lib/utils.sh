@@ -34,6 +34,7 @@ verbose_info() {
 DOTTY_BACKUPS_DIR="${DOTTY_BACKUPS_DIR:-$HOME/.dotty/backups}"
 DOTTY_VERBOSE="${DOTTY_VERBOSE:-false}"
 _SKIP_COUNT="${_SKIP_COUNT:-0}"
+_LINK_FAIL_COUNT="${_LINK_FAIL_COUNT:-0}"
 _LINK_DEPTH="${_LINK_DEPTH:-0}"
 
 EXCLUDE_PATTERNS=(
@@ -152,6 +153,7 @@ create_symlink() {
         success "Linked: ~${target#"$HOME"}"
     else
         warning "Failed to link: ~${target#"$HOME"}"
+        _LINK_FAIL_COUNT=$((_LINK_FAIL_COUNT + 1))
         return 1
     fi
 }

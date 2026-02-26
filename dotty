@@ -280,7 +280,7 @@ process_repo() {
                 DOTTY_LIB="$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
                 cd "$repo_dir"
                 ./dotty-run.sh
-            ) || warning "dotty-run.sh failed in $name (exit $?)"
+            ) || { warning "dotty-run.sh failed in $name (exit $?)"; _HOOK_ERRORS+=("$name"); }
         elif [[ -f "$repo_dir/dotty-run.sh" ]]; then
             warning "dotty-run.sh exists but is not executable in $name"
         fi
@@ -298,6 +298,9 @@ run_chain() {
         export DOTTY_ENV="$env"
     fi
 
+    _HOOK_ERRORS=()
+    _LINK_FAIL_COUNT=0
+
     # Register all repos first so the registry is complete even if a hook fails.
     local i
     for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
@@ -313,6 +316,17 @@ run_chain() {
 
         process_repo "$dir" "$env" "$command"
     done
+
+    # Print error summary if anything went wrong
+    _CHAIN_HAD_ERRORS=false
+    if [[ ${#_HOOK_ERRORS[@]} -gt 0 ]]; then
+        _CHAIN_HAD_ERRORS=true
+        warning "Hook failures: ${_HOOK_ERRORS[*]}"
+    fi
+    if [[ $_LINK_FAIL_COUNT -gt 0 ]]; then
+        _CHAIN_HAD_ERRORS=true
+        warning "$_LINK_FAIL_COUNT symlink(s) failed to create"
+    fi
 }
 
 # --- Commands
@@ -343,7 +357,7 @@ cmd_install() {
         run_chain "true" "install"
     fi
 
-    success "Install complete!"
+    [[ "$_CHAIN_HAD_ERRORS" != "true" ]] && success "Install complete!"
     cmd_status
 }
 
@@ -369,7 +383,7 @@ cmd_update() {
         run_chain "true" "update"
     fi
 
-    success "Update complete!"
+    [[ "$_CHAIN_HAD_ERRORS" != "true" ]] && success "Update complete!"
 }
 
 cmd_link() {
@@ -394,13 +408,20 @@ cmd_link() {
     env="$(detect_environment)"
     [[ -n "$env" ]] && info "Detected environment: $env"
 
+    _HOOK_ERRORS=()
+    _LINK_FAIL_COUNT=0
+
     local i
     for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
         local dir="${CHAIN_PATHS[$i]}"
         process_repo "$dir" "$env" "link"
     done
 
-    success "Linking complete!"
+    if [[ $_LINK_FAIL_COUNT -gt 0 ]]; then
+        warning "$_LINK_FAIL_COUNT symlink(s) failed to create"
+    else
+        success "Linking complete!"
+    fi
 }
 
 cmd_add() {
