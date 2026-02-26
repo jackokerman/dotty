@@ -14,7 +14,7 @@ DOTTY_DRY_RUN="${DOTTY_DRY_RUN:-false}"
 # shellcheck source=lib/utils.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
 
-# --- Registry
+# Registry
 
 registry_init() {
     mkdir -p "$DOTTY_DIR" "$DOTTY_REPOS_DIR" "$DOTTY_BACKUPS_DIR"
@@ -54,7 +54,7 @@ registry_names() {
     cut -d= -f1 "$DOTTY_REGISTRY" 2>/dev/null
 }
 
-# --- Config reading
+# Config reading
 
 # Find the config file for a repo. Returns 1 if not found.
 _find_config() {
@@ -100,7 +100,7 @@ read_config() {
     [[ -n "$DOTTY_NAME" ]] || die "DOTTY_NAME is required in $conf"
 }
 
-# --- Chain resolution
+# Chain resolution
 
 CHAIN_NAMES=()
 CHAIN_PATHS=()
@@ -230,7 +230,7 @@ ensure_repo() {
     echo "$clone_dir"
 }
 
-# --- Environment detection
+# Environment detection
 
 detect_environment() {
     local i
@@ -251,7 +251,7 @@ detect_environment() {
     done
 }
 
-# --- Core operations
+# Core operations
 
 pull_if_clean() {
     local dir="$1"
@@ -366,7 +366,7 @@ run_chain() {
     fi
 }
 
-# --- Commands
+# Commands
 
 cmd_install() {
     local source="${1:-}"
@@ -1075,7 +1075,7 @@ cmd_version() {
     echo "dotty $DOTTY_VERSION"
 }
 
-# --- Main dispatch
+# Main dispatch
 
 main() {
     local args=()

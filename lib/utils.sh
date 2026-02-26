@@ -6,7 +6,7 @@
 [[ -n "${_DOTTY_LIB_LOADED:-}" ]] && return 0
 _DOTTY_LIB_LOADED=1
 
-# --- Logging
+# Logging
 
 COLOR_BLUE="\033[34m"
 COLOR_GREEN="\033[32m"
@@ -29,7 +29,7 @@ verbose_info() {
     fi
 }
 
-# --- Symlink functions
+# Symlink functions
 
 DOTTY_BACKUPS_DIR="${DOTTY_BACKUPS_DIR:-$HOME/.dotty/backups}"
 DOTTY_VERBOSE="${DOTTY_VERBOSE:-false}"

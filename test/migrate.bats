@@ -12,7 +12,7 @@ teardown() {
     teardown_test_env
 }
 
-# --- _find_config / _has_config ---
+# _find_config / _has_config
 
 @test "_find_config finds .dotty/config" {
     create_test_repo "my-repo"
@@ -43,7 +43,7 @@ teardown() {
     ! _has_config "$empty_dir"
 }
 
-# --- _find_hook ---
+# _find_hook
 
 @test "_find_hook finds .dotty/run.sh" {
     create_test_repo "my-repo"
@@ -63,7 +63,7 @@ teardown() {
     [[ "$status" -ne 0 ]]
 }
 
-# --- read_config ---
+# read_config
 
 @test "read_config reads .dotty/config" {
     create_test_repo "my-config"
@@ -82,7 +82,7 @@ teardown() {
     [[ "$output" == *"No .dotty/config found"* ]]
 }
 
-# --- detect_environment ---
+# detect_environment
 
 @test "detect_environment reads from .dotty/config" {
     create_test_repo "env-repo"

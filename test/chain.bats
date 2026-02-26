@@ -11,7 +11,7 @@ teardown() {
     teardown_test_env
 }
 
-# --- resolve_chain ---
+# resolve_chain
 
 @test "resolve_chain resolves a single repo" {
     create_test_repo "my-dotfiles"
@@ -114,7 +114,7 @@ EOF
     [[ "${CHAIN_NAMES[3]}" == "top" ]]
 }
 
-# --- resolve_chain_from_leaf ---
+# resolve_chain_from_leaf
 
 @test "resolve_chain_from_leaf picks the longest chain" {
     create_test_repo "base"
@@ -135,7 +135,7 @@ EOF
     [[ "${CHAIN_NAMES[1]}" == "overlay" ]]
 }
 
-# --- detect_environment ---
+# detect_environment
 
 @test "detect_environment returns detected env" {
     create_test_repo "env-repo"

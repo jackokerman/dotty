@@ -11,7 +11,7 @@ teardown() {
     teardown_test_env
 }
 
-# --- create_symlink ---
+# create_symlink
 
 @test "create_symlink creates a new symlink" {
     local source_file="$TEST_HOME/source/file.txt"
@@ -73,7 +73,7 @@ teardown() {
     [[ "$(cat "$DOTTY_BACKUPS_DIR/existing.txt")" == "original" ]]
 }
 
-# --- create_symlinks_from_dir ---
+# create_symlinks_from_dir
 
 @test "create_symlinks_from_dir links files from source to target" {
     create_test_repo "test-repo"
@@ -162,7 +162,7 @@ teardown() {
     [[ -L "$TEST_HOME/.config/app/other.txt" ]]
 }
 
-# --- _explode_dir_symlink ---
+# _explode_dir_symlink
 
 @test "_explode_dir_symlink converts dir symlink to real dir with child symlinks" {
     # Create a source directory with files
@@ -230,7 +230,7 @@ teardown() {
     [[ "$(readlink "$TEST_HOME/.config/app/settings.txt")" == "$overlay_dir/home/.config/app/settings.txt" ]]
 }
 
-# --- cleanup_orphans ---
+# cleanup_orphans
 
 @test "cleanup_orphans removes dangling symlink pointing into repo" {
     create_test_repo "test-repo"
