@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-DOTTY_VERSION="0.1.0"
+DOTTY_VERSION="0.2.0"
 DOTTY_DIR="${DOTTY_DIR:-$HOME/.dotty}"
 DOTTY_REGISTRY="$DOTTY_DIR/registry"
 DOTTY_REPOS_DIR="$DOTTY_DIR/repos"
@@ -56,12 +56,43 @@ registry_names() {
 
 # --- Config reading
 
+# Find the config file for a repo. Checks .dotty/config first, falls back to dotty.conf.
+# Returns 1 if neither exists.
+_find_config() {
+    local repo_dir="$1"
+    if [[ -f "$repo_dir/.dotty/config" ]]; then
+        echo "$repo_dir/.dotty/config"
+    elif [[ -f "$repo_dir/dotty.conf" ]]; then
+        echo "$repo_dir/dotty.conf"
+    else
+        return 1
+    fi
+}
+
+# Find the hook script for a repo. Checks .dotty/run.sh first, falls back to dotty-run.sh.
+# Returns 1 if neither exists.
+_find_hook() {
+    local repo_dir="$1"
+    if [[ -f "$repo_dir/.dotty/run.sh" ]]; then
+        echo "$repo_dir/.dotty/run.sh"
+    elif [[ -f "$repo_dir/dotty-run.sh" ]]; then
+        echo "$repo_dir/dotty-run.sh"
+    else
+        return 1
+    fi
+}
+
+# Returns true if the repo has a config file in either location.
+_has_config() {
+    local repo_dir="$1"
+    [[ -f "$repo_dir/.dotty/config" || -f "$repo_dir/dotty.conf" ]]
+}
+
 # Sets: DOTTY_NAME, DOTTY_EXTENDS, DOTTY_ENVIRONMENTS, DOTTY_ENV_DETECT
 read_config() {
     local repo_dir="$1"
-    local conf="$repo_dir/dotty.conf"
-
-    [[ -f "$conf" ]] || die "No dotty.conf found in $repo_dir"
+    local conf
+    conf="$(_find_config "$repo_dir")" || die "No config found in $repo_dir (expected .dotty/config or dotty.conf)"
 
     DOTTY_NAME=""
     DOTTY_EXTENDS=()
@@ -127,7 +158,7 @@ resolve_chain_from_leaf() {
     local best_len=0
     local -a best_names=() best_paths=()
     for rpath in "${all_paths[@]}"; do
-        [[ -f "$rpath/dotty.conf" ]] || continue
+        _has_config "$rpath" || continue
         CHAIN_NAMES=()
         CHAIN_PATHS=()
         _RESOLVING=()
@@ -155,7 +186,7 @@ ensure_repo() {
     url_basename="$(basename "$source" .git)"
     local registered_path
     registered_path="$(registry_get "$url_basename")" || true
-    if [[ -n "$registered_path" && -d "$registered_path" && -f "$registered_path/dotty.conf" ]]; then
+    if [[ -n "$registered_path" && -d "$registered_path" ]] && _has_config "$registered_path"; then
         echo "$registered_path"
         return 0
     fi
@@ -163,9 +194,11 @@ ensure_repo() {
     # Check if already cloned in DOTTY_REPOS_DIR
     for dir in "$DOTTY_REPOS_DIR"/*/; do
         [[ -d "$dir" ]] || continue
-        if [[ -f "$dir/dotty.conf" ]]; then
+        local _conf
+        _conf="$(_find_config "$dir")" || true
+        if [[ -n "$_conf" ]]; then
             local found_name
-            found_name="$(DOTTY_NAME=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); DOTTY_ENV_DETECT=""; source "$dir/dotty.conf"; echo "$DOTTY_NAME")"
+            found_name="$(DOTTY_NAME=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); DOTTY_ENV_DETECT=""; source "$_conf"; echo "$DOTTY_NAME")"
             if [[ -n "$found_name" ]]; then
                 local found_path
                 found_path="$(registry_get "$found_name")" || true
@@ -190,9 +223,11 @@ ensure_repo() {
     git clone "$source" "$clone_dir" >&2 || die "Failed to clone $source"
 
     # Read its name and register
-    if [[ -f "$clone_dir/dotty.conf" ]]; then
+    local _clone_conf
+    _clone_conf="$(_find_config "$clone_dir")" || true
+    if [[ -n "$_clone_conf" ]]; then
         local cloned_name
-        cloned_name="$(DOTTY_NAME=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); DOTTY_ENV_DETECT=""; source "$clone_dir/dotty.conf"; echo "$DOTTY_NAME")"
+        cloned_name="$(DOTTY_NAME=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); DOTTY_ENV_DETECT=""; source "$_clone_conf"; echo "$DOTTY_NAME")"
         if [[ -n "$cloned_name" ]]; then
             registry_set "$cloned_name" "$clone_dir"
         fi
@@ -207,8 +242,10 @@ detect_environment() {
     local i
     for (( i=${#CHAIN_PATHS[@]}-1; i>=0; i-- )); do
         local dir="${CHAIN_PATHS[$i]}"
+        local _econf
+        _econf="$(_find_config "$dir")" || continue
         local env_detect
-        env_detect="$(DOTTY_ENV_DETECT=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); source "$dir/dotty.conf"; echo "$DOTTY_ENV_DETECT")"
+        env_detect="$(DOTTY_ENV_DETECT=""; DOTTY_EXTENDS=(); DOTTY_ENVIRONMENTS=(); source "$_econf"; echo "$DOTTY_ENV_DETECT")"
         if [[ -n "$env_detect" ]]; then
             local detected
             detected="$(eval "$env_detect")"
@@ -269,8 +306,12 @@ process_repo() {
     # Run hook (non-fatal so later repos still process).
     # Hooks are skipped during "link" (symlink-only mode) and dry-run.
     if [[ "$command" != "link" && "${DOTTY_DRY_RUN:-false}" != "true" ]]; then
-        if [[ -x "$repo_dir/dotty-run.sh" ]]; then
-            info "Running dotty-run.sh"
+        local hook_script
+        hook_script="$(_find_hook "$repo_dir")" || true
+        if [[ -n "$hook_script" && -x "$hook_script" ]]; then
+            local hook_name
+            hook_name="$(basename "$hook_script")"
+            info "Running $hook_name"
             (
                 export DOTTY_REPO_DIR="$repo_dir"
                 export DOTTY_ENV="${env:-}"
@@ -279,10 +320,12 @@ process_repo() {
                 export DOTTY_LIB
                 DOTTY_LIB="$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
                 cd "$repo_dir"
-                ./dotty-run.sh
-            ) || { warning "dotty-run.sh failed in $name (exit $?)"; _HOOK_ERRORS+=("$name"); }
-        elif [[ -f "$repo_dir/dotty-run.sh" ]]; then
-            warning "dotty-run.sh exists but is not executable in $name"
+                "$hook_script"
+            ) || { warning "$hook_name failed in $name (exit $?)"; _HOOK_ERRORS+=("$name"); }
+        elif [[ -n "$hook_script" ]]; then
+            local hook_name
+            hook_name="$(basename "$hook_script")"
+            warning "$hook_name exists but is not executable in $name"
         fi
     fi
 }
@@ -647,9 +690,10 @@ cmd_register() {
     path="$(cd "$path" && pwd)"
 
     if [[ -z "$name" ]]; then
-        [[ -f "$path/dotty.conf" ]] || die "No dotty.conf found and no name provided"
-        name="$(DOTTY_NAME=""; source "$path/dotty.conf"; echo "$DOTTY_NAME")"
-        [[ -n "$name" ]] || die "DOTTY_NAME not set in $path/dotty.conf"
+        local conf
+        conf="$(_find_config "$path")" || die "No config found (expected .dotty/config or dotty.conf) and no name provided"
+        name="$(DOTTY_NAME=""; source "$conf"; echo "$DOTTY_NAME")"
+        [[ -n "$name" ]] || die "DOTTY_NAME not set in $conf"
     fi
 
     registry_set "$name" "$path"
@@ -992,6 +1036,77 @@ cmd_trace() {
     fi
 }
 
+cmd_migrate() {
+    local target="${1:-}"
+
+    registry_init
+
+    local -a names=() paths=()
+    if [[ -n "$target" ]]; then
+        local path
+        path="$(registry_get "$target")" || true
+        [[ -n "$path" ]] || die "Unknown repo: $target"
+        names+=("$target")
+        paths+=("$path")
+    else
+        while IFS='=' read -r name rpath; do
+            [[ -n "$name" ]] || continue
+            names+=("$name")
+            paths+=("$rpath")
+        done < "$DOTTY_REGISTRY"
+    fi
+
+    [[ ${#names[@]} -gt 0 ]] || die "No repos registered."
+
+    local migrated=0
+
+    for (( i=0; i<${#names[@]}; i++ )); do
+        local name="${names[$i]}"
+        local rpath="${paths[$i]}"
+
+        [[ -d "$rpath" ]] || { warning "$name: directory not found ($rpath), skipping"; continue; }
+
+        # Already migrated?
+        if [[ -f "$rpath/.dotty/config" ]]; then
+            info "$name: already using .dotty/ layout"
+            continue
+        fi
+
+        # Nothing to migrate?
+        if [[ ! -f "$rpath/dotty.conf" && ! -f "$rpath/dotty-run.sh" ]]; then
+            info "$name: no dotty.conf or dotty-run.sh found, skipping"
+            continue
+        fi
+
+        title "Migrating $name"
+
+        if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+            [[ -f "$rpath/dotty.conf" ]] && info "[dry-run] Would move dotty.conf → .dotty/config"
+            [[ -f "$rpath/dotty-run.sh" ]] && info "[dry-run] Would move dotty-run.sh → .dotty/run.sh"
+        else
+            mkdir -p "$rpath/.dotty"
+            if [[ -f "$rpath/dotty.conf" ]]; then
+                mv "$rpath/dotty.conf" "$rpath/.dotty/config"
+                info "Moved dotty.conf → .dotty/config"
+            fi
+            if [[ -f "$rpath/dotty-run.sh" ]]; then
+                mv "$rpath/dotty-run.sh" "$rpath/.dotty/run.sh"
+                info "Moved dotty-run.sh → .dotty/run.sh"
+            fi
+        fi
+
+        migrated=$((migrated + 1))
+    done
+
+    if [[ $migrated -gt 0 ]]; then
+        success "Migrated $migrated repo(s) to .dotty/ layout"
+        echo ""
+        info "Don't forget to commit the changes in each repo."
+    else
+        info "Nothing to migrate."
+    fi
+}
+
 cmd_help() {
     cat <<'EOF'
 dotty - a dotfiles manager with overlay semantics
@@ -1009,6 +1124,7 @@ Commands:
   unregister <name>        Remove a repo from the registry
   files [repo]             List all managed files, grouped by repo
   trace <path>             Show which repo a file or directory comes from
+  migrate [name]           Move dotty.conf/dotty-run.sh to .dotty/ directory
   guard [path]             Install pre-commit hook to block sensitive content
   unguard [path]           Remove the dotty pre-commit hook
   help                     Show this help
@@ -1068,6 +1184,7 @@ main() {
         trace)        cmd_trace "$@" ;;
         guard)        cmd_guard "$@" ;;
         unguard)      cmd_unguard "$@" ;;
+        migrate)      cmd_migrate "$@" ;;
         help|--help)  cmd_help ;;
         version|--version) cmd_version ;;
         *)            die "Unknown command: $cmd. Run 'dotty help' for usage." ;;

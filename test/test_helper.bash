@@ -94,6 +94,37 @@ EOF
     REPLY="$repo_dir"
 }
 
+# Create a test repo using the new .dotty/ layout.
+# Usage: create_test_repo_new_layout "my-repo" [extends_url...]
+# Sets REPLY to the repo path.
+create_test_repo_new_layout() {
+    local name="$1"
+    shift
+    local repo_dir="$TEST_HOME/repos/$name"
+    mkdir -p "$repo_dir/home" "$repo_dir/.dotty"
+
+    local extends_array=""
+    if [[ $# -gt 0 ]]; then
+        extends_array="DOTTY_EXTENDS=("
+        for url in "$@"; do
+            extends_array+="\"$url\" "
+        done
+        extends_array+=")"
+    else
+        extends_array="DOTTY_EXTENDS=()"
+    fi
+
+    cat > "$repo_dir/.dotty/config" <<EOF
+DOTTY_NAME="$name"
+$extends_array
+DOTTY_ENVIRONMENTS=()
+DOTTY_ENV_DETECT=""
+DOTTY_LINK_IGNORE=()
+EOF
+
+    REPLY="$repo_dir"
+}
+
 # Add a file to a test repo's home/ directory.
 # Usage: add_repo_file "repo_path" "relative/path" ["content"]
 add_repo_file() {

@@ -43,9 +43,11 @@ If your repo declares dependencies via `DOTTY_EXTENDS`, dotty resolves the full 
 
 ## Setting up your dotfiles repo
 
-Each repo that dotty manages needs a `dotty.conf` at its root:
+Each repo that dotty manages needs a config file. The preferred location is `.dotty/config`, though dotty also supports `dotty.conf` at the repo root for backward compatibility.
 
 ```bash
+# .dotty/config (or dotty.conf at repo root)
+
 # Required: unique name, used as registry key
 DOTTY_NAME="dotfiles"
 
@@ -83,8 +85,9 @@ Your repo mirrors the structure of `$HOME`. Everything in `home/` gets symlinked
 
 ```
 my-dotfiles/
-├── dotty.conf              # config (required)
-├── dotty-run.sh            # hook script (optional, must be executable)
+├── .dotty/
+│   ├── config              # config (required)
+│   └── run.sh              # hook script (optional, must be executable)
 ├── home/                   # symlinked to $HOME
 │   ├── .zshrc              # → ~/.zshrc
 │   ├── .gitconfig          # → ~/.gitconfig
@@ -97,6 +100,10 @@ my-dotfiles/
     └── home/               #   overlaid onto $HOME when env=remote
 ```
 
+> [!Note]
+>
+> Dotty also supports the legacy layout with `dotty.conf` and `dotty-run.sh` at the repo root. If both exist, `.dotty/config` and `.dotty/run.sh` take precedence. Use `dotty migrate` to move existing repos to the new layout.
+
 ## Multi-repo chains
 
 This is the core idea behind dotty. You keep a base layer of personal config and extend it with repo-specific overrides.
@@ -104,23 +111,23 @@ This is the core idea behind dotty. You keep a base layer of personal config and
 Here's a typical setup with personal and work dotfiles:
 
 ```bash
-# personal dotfiles (dotty.conf)
+# personal dotfiles (.dotty/config)
 DOTTY_NAME="dotfiles"
 DOTTY_EXTENDS=()
 
-# work dotfiles (dotty.conf)
+# work dotfiles (.dotty/config)
 DOTTY_NAME="work-dotfiles"
 DOTTY_EXTENDS=("https://github.com/you/dotfiles.git")
 ```
 
 Running `dotty install ~/work-dotfiles` kicks off the following:
 
-1. Reads `work-dotfiles/dotty.conf`, sees it extends personal dotfiles
+1. Reads `work-dotfiles/.dotty/config`, sees it extends personal dotfiles
 2. Clones personal dotfiles to `~/.dotty/repos/dotfiles` (if not already registered)
 3. Symlinks `dotfiles/home/` into `$HOME` (base layer)
-4. Runs `dotfiles/dotty-run.sh`
+4. Runs `dotfiles/.dotty/run.sh`
 5. Symlinks `work-dotfiles/home/` into `$HOME` (overlay, wins on conflicts)
-6. Runs `work-dotfiles/dotty-run.sh`
+6. Runs `work-dotfiles/.dotty/run.sh`
 
 ### Composition patterns
 
@@ -248,9 +255,21 @@ Symlinks from other repos are left untouched. If dotty backed up a file when it 
 
 Supports `--dry-run` to preview what would be removed without making changes.
 
+### `dotty migrate [name]`
+
+Moves dotty config files from the legacy layout (`dotty.conf`, `dotty-run.sh` at the repo root) into the `.dotty/` directory (`config`, `run.sh`). Without a name argument, migrates all registered repos.
+
+```bash
+dotty migrate              # migrate all repos
+dotty migrate dotfiles     # migrate a specific repo
+dotty --dry-run migrate    # preview what would change
+```
+
+After migrating, commit the changes in each repo.
+
 ### `dotty register <path> [name]`
 
-Register an already-cloned repo without running install. The name is read from `dotty.conf` if not provided.
+Register an already-cloned repo without running install. The name is read from the config file if not provided.
 
 ### `dotty unregister <name>`
 
@@ -271,7 +290,7 @@ dotty -n install           # preview a full install cycle
 
 ## Hooks
 
-If a repo has an executable `dotty-run.sh`, dotty runs it after creating symlinks during `install` and `update` (but not `link`). These environment variables are available:
+If a repo has an executable hook script (`.dotty/run.sh` or `dotty-run.sh`), dotty runs it after creating symlinks during `install` and `update` (but not `link`). These environment variables are available:
 
 - `DOTTY_REPO_DIR` — absolute path to the repo
 - `DOTTY_ENV` — detected environment (empty if none)
@@ -287,7 +306,7 @@ Since hooks run on both `install` and `update`, you can use `DOTTY_COMMAND` to c
 
 ```bash
 #!/usr/bin/env bash
-# dotty-run.sh
+# .dotty/run.sh
 
 # Always run — fast and idempotent
 setup_editor_config
@@ -322,7 +341,7 @@ Dotty ships a utility library at `lib/utils.sh` that hook scripts can source via
 
 ```bash
 #!/usr/bin/env bash
-# dotty-run.sh
+# .dotty/run.sh
 source "$DOTTY_LIB"
 
 title "Setting up my dotfiles"
@@ -412,7 +431,7 @@ When dotty creates a symlink where a real file already exists, it moves the orig
 
 ## Migrating from a manual install script
 
-If you already have dotfiles with an `install.sh`, you can adopt dotty incrementally. Add a `dotty.conf` to your repo, create a `dotty-run.sh` with your post-link setup logic, and update your `install.sh` to delegate to dotty when it's available:
+If you already have dotfiles with an `install.sh`, you can adopt dotty incrementally. Add a `.dotty/config` to your repo, create a `.dotty/run.sh` with your post-link setup logic, and update your `install.sh` to delegate to dotty when it's available:
 
 ```bash
 #!/usr/bin/env bash
@@ -427,7 +446,7 @@ Machines without dotty keep working. As you install dotty on each machine, they 
 
 ## Troubleshooting
 
-**"No dotty.conf found"** — The target directory needs a `dotty.conf` file. This is required for every dotfiles repo that dotty manages.
+**"No config found"** — The target directory needs a config file at `.dotty/config` (preferred) or `dotty.conf` (legacy). This is required for every dotfiles repo that dotty manages.
 
 **Symlink conflicts** — If a real file exists where dotty wants to create a symlink, it backs up the file to `~/.dotty/backups/` and creates the link. Check backups if something goes missing.
 
