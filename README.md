@@ -467,16 +467,3 @@ fi
 
 This runs `dotty update` in the background on every shell startup. It won't block your prompt and it's safe to run repeatedly since it's just `git pull` plus idempotent symlink creation.
 
-## Troubleshooting
-
-**"No .dotty/config found"** — The target directory needs a `.dotty/config` file. This is required for every dotfiles repo that dotty manages.
-
-**Symlink conflicts** — If a real file exists where dotty wants to create a symlink, it backs up the file to `~/.dotty/backups/` and creates the link. Check backups if something goes missing.
-
-**Broken symlinks after removing files from a repo** — Dotty automatically cleans up orphan symlinks (dangling links whose source was removed) during `link`, `install`, and `update`. If you see a summary like "Removed 2 orphan symlink(s)", that's dotty housekeeping. Use `--verbose` to see which files were cleaned up, or `--dry-run` to preview without removing anything.
-
-**Broken symlinks after moving repos** — Run `dotty link` to recreate all symlinks. If you've moved a repo, re-register it with `dotty register /new/path`.
-
-**Chain resolution fails** — Make sure parent repos are accessible (can be cloned or are already registered). Use `dotty status` to see the current state.
-
-**Error summary after processing** — If hooks fail or symlinks can't be created, dotty continues processing all repos and prints a summary at the end (e.g., "Hook failures: my-repo" or "3 symlink(s) failed to create"). All repos still get processed even when individual steps fail.
