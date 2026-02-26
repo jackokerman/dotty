@@ -14,7 +14,7 @@ The `dotty` script is structured as a monolithic bash program with procedural se
 
 1. **Logging** (color-coded output helpers: `title`, `info`, `success`, `warning`, `die`)
 2. **Registry** (`registry_*` functions manage a flat `name=path` file at `~/.dotty/registry`)
-3. **Config reading** (sources `.dotty/config` or `dotty.conf` from each repo, with `_find_config`/`_has_config` helpers)
+3. **Config reading** (sources `.dotty/config` from each repo via `_find_config`/`_has_config` helpers)
 4. **Chain resolution** (recursive dependency resolution with cycle detection via `resolve_chain`)
 5. **Environment detection** (evaluates `DOTTY_ENV_DETECT` from first repo that defines it)
 6. **Symlink management** (`create_symlinks_for`, `_link_item`, `_explode_dir_symlink` handle recursive directory merging)
@@ -49,7 +49,7 @@ Dotty stores state in `~/.dotty/`:
 
 ## Repo configuration
 
-Each managed dotfiles repo has a config file at `.dotty/config` (preferred) or `dotty.conf` (legacy). The `_find_config` helper checks `.dotty/config` first and falls back to `dotty.conf`. Similarly, hooks can live at `.dotty/run.sh` or `dotty-run.sh`, resolved by `_find_hook`.
+Each managed dotfiles repo has a config file at `.dotty/config`. The `_find_config` helper resolves this path. Similarly, hooks live at `.dotty/run.sh`, resolved by `_find_hook`.
 
 ```bash
 # .dotty/config (or dotty.conf at repo root)
@@ -66,7 +66,7 @@ Files in `repo/home/` are symlinked to `$HOME`. Environment overlays live in `re
 Run the automated test suite first:
 
 ```bash
-./test/bats/bin/bats test/    # run all tests (80 tests across 8 files)
+./test/bats/bin/bats test/    # run all tests (69 tests across 8 files)
 ```
 
 Tests use isolated temp directories and don't touch real dotfiles. Test files live in `test/`:
@@ -77,7 +77,7 @@ Tests use isolated temp directories and don't touch real dotfiles. Test files li
 - `trace.bats` — symlink provenance tracing
 - `files.bats` — file listing and status
 - `uninstall.bats` — repo uninstallation and backup restore
-- `migrate.bats` — config layout migration, both-layout support
+- `migrate.bats` — `.dotty/` directory layout helpers
 
 After tests pass, verify against the user's actual dotfiles repos. Use `./dotty status` or read `~/.dotty/registry` to discover what's registered on this machine. Common manual test workflows:
 
@@ -106,7 +106,7 @@ Three user-facing surfaces must stay in sync with the code:
 - **`completions/_dotty`** — zsh completions. Update when adding commands, subcommands, or flags.
 - **`README.md`** — full documentation of commands, configuration format, hook contract, directory layout, options, and troubleshooting. Update when any user-visible behavior changes.
 
-Check for changes to command behavior or flags, new or renamed environment variables, config fields (in `.dotty/config` or legacy `dotty.conf`), hook execution semantics, and directory structure or state files.
+Check for changes to command behavior or flags, new or renamed environment variables, `.dotty/config` fields, hook execution semantics, and directory structure or state files.
 
 ### What to check in downstream repos
 
@@ -114,7 +114,7 @@ Scan each registered repo for files that reference dotty and verify they still m
 
 - **CLAUDE.md files** — often contain dotty architecture docs, command references, hook contract details, and overlay semantics descriptions.
 - **README.md files** — installation instructions, command examples, workflow descriptions, and configuration documentation.
-- **Hook scripts** (`.dotty/run.sh` or legacy `dotty-run.sh`) — env var usage (`DOTTY_REPO_DIR`, `DOTTY_ENV`, `DOTTY_COMMAND`, `DOTTY_LIB`) and any calls to utility library functions.
+- **`.dotty/run.sh` hooks** — env var usage (`DOTTY_REPO_DIR`, `DOTTY_ENV`, `DOTTY_COMMAND`, `DOTTY_LIB`) and any calls to utility library functions.
 - **Shell config files** (`.zshenv.local`, `.zshrc.local`, etc.) — references to `DOTTY_ENV`, `DOTTY_GUARD_PATTERNS`, or other dotty variables.
 - **`install.sh` scripts** — bootstrap logic that clones or invokes dotty.
 - **Scripts that source `$DOTTY_LIB`** — any script using dotty's utility library for logging and symlinks.
@@ -125,7 +125,7 @@ Not just hook contract changes. Any of these dotty changes can cause downstream 
 
 - Commands (names, flags, subcommands, output format)
 - Environment variables (hook vars, guard vars, detection vars)
-- Config fields or their semantics (`.dotty/config` or legacy `dotty.conf`)
+- `.dotty/config` fields or their semantics
 - Guard mechanism (pattern format, hook behavior)
 - Utility library functions exposed via `$DOTTY_LIB`
 - Directory layout or state file locations (`~/.dotty/` structure)

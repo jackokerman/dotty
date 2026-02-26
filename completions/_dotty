@@ -24,7 +24,6 @@ _dotty() {
         'unregister:Remove a repo from the registry'
         'files:List all managed files, grouped by repo'
         'trace:Show which repo a file or directory comes from'
-        'migrate:Move dotty.conf/dotty-run.sh to .dotty/ directory'
         'guard:Install pre-commit hook to block sensitive content'
         'unguard:Remove the dotty pre-commit hook'
         'help:Show help'
@@ -48,7 +47,7 @@ _dotty() {
         install)
             _files -/
             ;;
-        update|link|uninstall|unregister|files|migrate)
+        update|link|uninstall|unregister|files)
             _dotty_registry_names
             ;;
         add)

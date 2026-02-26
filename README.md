@@ -43,10 +43,10 @@ If your repo declares dependencies via `DOTTY_EXTENDS`, dotty resolves the full 
 
 ## Setting up your dotfiles repo
 
-Each repo that dotty manages needs a config file. The preferred location is `.dotty/config`, though dotty also supports `dotty.conf` at the repo root for backward compatibility.
+Each repo that dotty manages needs a config file at `.dotty/config`:
 
 ```bash
-# .dotty/config (or dotty.conf at repo root)
+# .dotty/config
 
 # Required: unique name, used as registry key
 DOTTY_NAME="dotfiles"
@@ -100,9 +100,6 @@ my-dotfiles/
     └── home/               #   overlaid onto $HOME when env=remote
 ```
 
-> [!Note]
->
-> Dotty also supports the legacy layout with `dotty.conf` and `dotty-run.sh` at the repo root. If both exist, `.dotty/config` and `.dotty/run.sh` take precedence. Use `dotty migrate` to move existing repos to the new layout.
 
 ## Multi-repo chains
 
@@ -254,18 +251,6 @@ dotty uninstall work-dotfiles
 Symlinks from other repos are left untouched. If dotty backed up a file when it originally created a symlink (stored in `~/.dotty/backups/`), the backup is restored to its original location.
 
 Supports `--dry-run` to preview what would be removed without making changes.
-
-### `dotty migrate [name]`
-
-Moves dotty config files from the legacy layout (`dotty.conf`, `dotty-run.sh` at the repo root) into the `.dotty/` directory (`config`, `run.sh`). Without a name argument, migrates all registered repos.
-
-```bash
-dotty migrate              # migrate all repos
-dotty migrate dotfiles     # migrate a specific repo
-dotty --dry-run migrate    # preview what would change
-```
-
-After migrating, commit the changes in each repo.
 
 ### `dotty register <path> [name]`
 
@@ -431,7 +416,7 @@ When dotty creates a symlink where a real file already exists, it moves the orig
 
 ## Migrating from a manual install script
 
-If you already have dotfiles with an `install.sh`, you can adopt dotty incrementally. Add a `.dotty/config` to your repo, create a `.dotty/run.sh` with your post-link setup logic, and update your `install.sh` to delegate to dotty when it's available:
+If you already have dotfiles with an `install.sh`, you can adopt dotty incrementally. Create a `.dotty/config` in your repo, add a `.dotty/run.sh` with your post-link setup logic, and update your `install.sh` to delegate to dotty when it's available:
 
 ```bash
 #!/usr/bin/env bash
@@ -446,7 +431,7 @@ Machines without dotty keep working. As you install dotty on each machine, they 
 
 ## Troubleshooting
 
-**"No config found"** — The target directory needs a config file at `.dotty/config` (preferred) or `dotty.conf` (legacy). This is required for every dotfiles repo that dotty manages.
+**"No .dotty/config found"** — The target directory needs a `.dotty/config` file. This is required for every dotfiles repo that dotty manages.
 
 **Symlink conflicts** — If a real file exists where dotty wants to create a symlink, it backs up the file to `~/.dotty/backups/` and creates the link. Check backups if something goes missing.
 

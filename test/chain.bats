@@ -52,7 +52,7 @@ teardown() {
     local dir_b="$REPLY"
 
     # Make them circular: a extends b, b extends a
-    cat > "$dir_a/dotty.conf" <<EOF
+    cat > "$dir_a/.dotty/config" <<EOF
 DOTTY_NAME="repo-a"
 DOTTY_EXTENDS=("$dir_b")
 DOTTY_ENVIRONMENTS=()
@@ -60,7 +60,7 @@ DOTTY_ENV_DETECT=""
 DOTTY_LINK_IGNORE=()
 EOF
 
-    cat > "$dir_b/dotty.conf" <<EOF
+    cat > "$dir_b/.dotty/config" <<EOF
 DOTTY_NAME="repo-b"
 DOTTY_EXTENDS=("$dir_a")
 DOTTY_ENVIRONMENTS=()
@@ -88,8 +88,8 @@ EOF
 
     # Create a top repo that extends both left and right
     local top_dir="$TEST_HOME/repos/top"
-    mkdir -p "$top_dir/home"
-    cat > "$top_dir/dotty.conf" <<EOF
+    mkdir -p "$top_dir/home" "$top_dir/.dotty"
+    cat > "$top_dir/.dotty/config" <<EOF
 DOTTY_NAME="top"
 DOTTY_EXTENDS=("$left_dir" "$right_dir")
 DOTTY_ENVIRONMENTS=()
@@ -141,7 +141,7 @@ EOF
     create_test_repo "env-repo"
     local repo_dir="$REPLY"
 
-    cat > "$repo_dir/dotty.conf" <<'EOF'
+    cat > "$repo_dir/.dotty/config" <<'EOF'
 DOTTY_NAME="env-repo"
 DOTTY_EXTENDS=()
 DOTTY_ENVIRONMENTS=("laptop" "remote")
@@ -171,7 +171,7 @@ EOF
 @test "detect_environment uses overlay detection over base" {
     create_test_repo "base"
     local base_dir="$REPLY"
-    cat > "$base_dir/dotty.conf" <<'EOF'
+    cat > "$base_dir/.dotty/config" <<'EOF'
 DOTTY_NAME="base"
 DOTTY_EXTENDS=()
 DOTTY_ENVIRONMENTS=()
@@ -181,7 +181,7 @@ EOF
 
     create_test_repo "overlay"
     local overlay_dir="$REPLY"
-    cat > "$overlay_dir/dotty.conf" <<'EOF'
+    cat > "$overlay_dir/.dotty/config" <<'EOF'
 DOTTY_NAME="overlay"
 DOTTY_EXTENDS=()
 DOTTY_ENVIRONMENTS=("laptop" "remote")
