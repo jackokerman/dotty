@@ -212,6 +212,15 @@ dotty status
   ● work-dotfiles (/home/you/work-dotfiles) [modified]
 ```
 
+### `dotty files [repo]`
+
+Lists all files managed by dotty, grouped by repo. Each file shows whether it's currently linked, overridden by a later repo in the chain, or not linked (e.g., excluded via `DOTTY_LINK_IGNORE`).
+
+```bash
+dotty files                # list all managed files
+dotty files work-dotfiles  # list only files from one repo
+```
+
 ### `dotty trace <path>`
 
 Shows which repo a file or directory comes from. Useful for debugging your chain when you're not sure which repo is providing a particular config file.

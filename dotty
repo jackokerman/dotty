@@ -700,6 +700,152 @@ cmd_unguard() {
     success "Guard hook removed from $target"
 }
 
+_FILE_LINES=()
+
+# Check if a $HOME path is managed by dotty, either as a direct symlink
+# or via a parent directory that is symlinked into a repo.
+_is_managed() {
+    local home_path="$1"
+    local source_item="$2"
+
+    # Direct symlink pointing to the source item
+    if [[ -L "$home_path" ]]; then
+        local link_target
+        link_target="$(readlink "$home_path")"
+        if [[ "$link_target" == "$source_item" ]]; then
+            echo "linked"
+            return 0
+        else
+            echo "overridden"
+            return 0
+        fi
+    fi
+
+    # Check if a parent directory is a symlink into a repo
+    local check="$home_path"
+    while [[ "$check" != "$HOME" && "$check" != "/" ]]; do
+        check="$(dirname "$check")"
+        if [[ -L "$check" ]]; then
+            # Parent is a symlink — check if the file is accessible through it
+            if [[ -e "$home_path" ]]; then
+                echo "linked"
+                return 0
+            fi
+            break
+        fi
+    done
+
+    echo "not_linked"
+}
+
+_files_walk() {
+    local source_dir="$1"
+    local prefix="$2"
+    local repo_name="$3"
+
+    [[ -d "$source_dir" ]] || return 0
+
+    local item
+    for item in "$source_dir"/* "$source_dir"/.*; do
+        [[ -e "$item" ]] || continue
+        local name
+        name="$(basename "$item")"
+        [[ "$name" == "." || "$name" == ".." ]] && continue
+        should_exclude "$name" && continue
+
+        local rel="${prefix:+$prefix/}$name"
+        local home_path="$HOME/$rel"
+
+        if [[ -d "$item" && ! -L "$item" ]]; then
+            _files_walk "$item" "$rel" "$repo_name"
+        else
+            local status
+            status="$(_is_managed "$home_path" "$item")"
+            _FILE_LINES+=("$status|$rel|$repo_name")
+        fi
+    done
+}
+
+cmd_files() {
+    local filter_repo="${1:-}"
+
+    registry_init
+
+    local -a all_names=()
+    local -a all_paths=()
+    while IFS='=' read -r name rpath; do
+        [[ -n "$name" ]] || continue
+        if [[ -n "$filter_repo" && "$name" != "$filter_repo" ]]; then
+            continue
+        fi
+        all_names+=("$name")
+        all_paths+=("$rpath")
+    done < "$DOTTY_REGISTRY"
+
+    if [[ ${#all_names[@]} -eq 0 ]]; then
+        if [[ -n "$filter_repo" ]]; then
+            die "Unknown repo: $filter_repo"
+        fi
+        info "No repos registered."
+        return 0
+    fi
+
+    # Detect environment for overlay scanning
+    local env=""
+    env="$(detect_environment 2>/dev/null)" || true
+
+    _FILE_LINES=()
+
+    for (( i=0; i<${#all_names[@]}; i++ )); do
+        local name="${all_names[$i]}"
+        local rpath="${all_paths[$i]}"
+
+        _files_walk "$rpath/home" "" "$name"
+
+        # Environment overlay
+        if [[ -n "$env" && -d "$rpath/$env/home" ]]; then
+            _files_walk "$rpath/$env/home" "" "$name"
+        fi
+    done
+
+    if [[ ${#_FILE_LINES[@]} -eq 0 ]]; then
+        info "No managed files found."
+        return 0
+    fi
+
+    # Group by repo, show status
+    local current_repo=""
+    # Sort by repo name then path
+    local -a sorted
+    IFS=$'\n' sorted=($(printf '%s\n' "${_FILE_LINES[@]}" | sort -t'|' -k3,3 -k2,2))
+    unset IFS
+
+    for line in "${sorted[@]}"; do
+        local status="${line%%|*}"
+        local rest="${line#*|}"
+        local rel="${rest%%|*}"
+        local repo="${rest#*|}"
+
+        if [[ "$repo" != "$current_repo" ]]; then
+            [[ -n "$current_repo" ]] && echo ""
+            title "$repo"
+            current_repo="$repo"
+        fi
+
+        case "$status" in
+            linked)
+                echo -e "  ${COLOR_GREEN}✓${COLOR_NONE} ~/$rel"
+                ;;
+            overridden)
+                echo -e "  ${COLOR_DIM}○ ~/$rel (overridden)${COLOR_NONE}"
+                ;;
+            not_linked)
+                echo -e "  ${COLOR_YELLOW}● ~/$rel (not linked)${COLOR_NONE}"
+                ;;
+        esac
+    done
+}
+
 cmd_trace() {
     local target="${1:-}"
     [[ -n "$target" ]] || die "Usage: dotty trace <path>"
@@ -788,6 +934,7 @@ Commands:
   status                   Show repos, chain order, and detected environment
   register <path> [name]   Register an already-cloned repo
   unregister <name>        Remove a repo from the registry
+  files [repo]             List all managed files, grouped by repo
   trace <path>             Show which repo a file or directory comes from
   guard [path]             Install pre-commit hook to block sensitive content
   unguard [path]           Remove the dotty pre-commit hook
@@ -843,6 +990,7 @@ main() {
         status)       cmd_status "$@" ;;
         register)     cmd_register "$@" ;;
         unregister)   cmd_unregister "$@" ;;
+        files)        cmd_files "$@" ;;
         trace)        cmd_trace "$@" ;;
         guard)        cmd_guard "$@" ;;
         unguard)      cmd_unguard "$@" ;;

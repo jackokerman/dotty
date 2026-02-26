@@ -21,6 +21,7 @@ _dotty() {
         'status:Show repos, chain order, and detected environment'
         'register:Register an already-cloned repo'
         'unregister:Remove a repo from the registry'
+        'files:List all managed files, grouped by repo'
         'trace:Show which repo a file or directory comes from'
         'guard:Install pre-commit hook to block sensitive content'
         'unguard:Remove the dotty pre-commit hook'
@@ -45,7 +46,7 @@ _dotty() {
         install)
             _files -/
             ;;
-        update|link|unregister)
+        update|link|unregister|files)
             _dotty_registry_names
             ;;
         add)
