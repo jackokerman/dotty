@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-DOTTY_VERSION="0.2.0"
+DOTTY_VERSION="0.3.0"
 DOTTY_DIR="${DOTTY_DIR:-$HOME/.dotty}"
 DOTTY_REGISTRY="$DOTTY_DIR/registry"
 DOTTY_REPOS_DIR="$DOTTY_DIR/repos"
@@ -267,6 +267,40 @@ pull_if_clean() {
     fi
 }
 
+# Pull the dotty repo itself before processing the chain. If the script
+# changed on disk, re-exec with the original args so bash reads a fresh
+# copy (bash reads scripts incrementally, so mid-flight changes can
+# corrupt execution).
+self_update() {
+    # Guard against infinite re-exec loops.
+    if [[ "${DOTTY_SELF_UPDATED:-}" == "1" ]]; then
+        return 0
+    fi
+
+    # Non-git installs (e.g. manual copy) can't self-update.
+    if [[ ! -d "$DOTTY_DIR/.git" ]]; then
+        return 0
+    fi
+
+    if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+        info "[dry-run] Would pull dotty repo ($DOTTY_DIR)"
+        return 0
+    fi
+
+    local before after
+    before="$(cd "$DOTTY_DIR" && git rev-parse HEAD 2>/dev/null)" || return 0
+
+    pull_if_clean "$DOTTY_DIR"
+
+    after="$(cd "$DOTTY_DIR" && git rev-parse HEAD 2>/dev/null)" || return 0
+
+    if [[ "$before" != "$after" ]]; then
+        info "Dotty updated, restarting..."
+        export DOTTY_SELF_UPDATED=1
+        exec "$DOTTY_DIR/dotty" "${_ORIGINAL_ARGS[@]}"
+    fi
+}
+
 process_repo() {
     local repo_dir="$1"
     local env="${2:-}"
@@ -375,6 +409,7 @@ cmd_install() {
 
     if [[ -z "$source" ]]; then
         # No argument: re-run install on existing repos
+        self_update
         resolve_chain_from_leaf
         run_chain "true" "install"
     else
@@ -402,6 +437,7 @@ cmd_update() {
     local target="${1:-}"
 
     registry_init
+    self_update
 
     if [[ -n "$target" ]]; then
         # Update a single repo, but re-run full chain
@@ -1030,6 +1066,30 @@ cmd_trace() {
     fi
 }
 
+cmd_self_update() {
+    if [[ ! -d "$DOTTY_DIR/.git" ]]; then
+        die "Dotty is not a git repo at $DOTTY_DIR, cannot self-update."
+    fi
+
+    if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+        info "[dry-run] Would pull dotty repo ($DOTTY_DIR)"
+        return 0
+    fi
+
+    local before after
+    before="$(cd "$DOTTY_DIR" && git rev-parse HEAD 2>/dev/null)" || die "Failed to read dotty revision"
+
+    pull_if_clean "$DOTTY_DIR"
+
+    after="$(cd "$DOTTY_DIR" && git rev-parse HEAD 2>/dev/null)" || die "Failed to read dotty revision"
+
+    if [[ "$before" != "$after" ]]; then
+        success "Dotty updated ($(echo "$before" | head -c 7)..$(echo "$after" | head -c 7))"
+    else
+        success "Already up to date."
+    fi
+}
+
 cmd_help() {
     cat <<'EOF'
 dotty - a dotfiles manager with overlay semantics
@@ -1038,7 +1098,8 @@ Usage: dotty [-v] [-n] <command> [args]
 
 Commands:
   install [url-or-path]    Resolve chain, clone deps, link files, run hooks
-  update [name]            Pull all repos (or one), re-link, re-run hooks
+  update [name]            Pull dotty and all repos, re-link, re-run hooks
+  self-update              Update dotty itself
   add <file> [--repo X]    Move a dotfile into a repo and symlink it back
   link [name]              Re-create symlinks only (skip pull and hooks)
   uninstall <name>         Remove a repo's symlinks, restore backups, unregister
@@ -1078,6 +1139,8 @@ cmd_version() {
 # Main dispatch
 
 main() {
+    _ORIGINAL_ARGS=("$@")
+
     local args=()
     for arg in "$@"; do
         case "$arg" in
@@ -1096,6 +1159,7 @@ main() {
     case "$cmd" in
         install)      cmd_install "$@" ;;
         update)       cmd_update "$@" ;;
+        self-update)  cmd_self_update "$@" ;;
         add)          cmd_add "$@" ;;
         link)         cmd_link "$@" ;;
         uninstall)    cmd_uninstall "$@" ;;

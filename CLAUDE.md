@@ -78,6 +78,7 @@ Tests use isolated temp directories and don't touch real dotfiles. Test files li
 - `files.bats` — file listing and status
 - `uninstall.bats` — repo uninstallation and backup restore
 - `migrate.bats` — `.dotty/` directory layout helpers
+- `self_update.bats` — self-update logic and loop guard
 
 After tests pass, verify against the user's actual dotfiles repos. Use `./dotty status` or read `~/.dotty/registry` to discover what's registered on this machine. Common manual test workflows:
 

@@ -15,7 +15,8 @@ _dotty_registry_names() {
 _dotty() {
     local -a commands=(
         'install:Resolve chain, clone deps, link files, run hooks'
-        'update:Pull repos, re-link, re-run hooks'
+        'update:Pull dotty and all repos, re-link, re-run hooks'
+        'self-update:Update dotty itself'
         'add:Move a dotfile into a repo and symlink it back'
         'link:Re-create symlinks only (skip pull and hooks)'
         'uninstall:Remove a repo'\''s symlinks, restore backups, unregister'
@@ -70,6 +71,8 @@ _dotty() {
             ;;
         guard|unguard)
             _files -/
+            ;;
+        self-update)
             ;;
     esac
 }

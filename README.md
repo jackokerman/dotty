@@ -202,11 +202,19 @@ dotty install                                          # re-run install on exist
 
 ### `dotty update [name]`
 
-Pulls all repos (or a specific one) and re-runs the full symlink and hook cycle.
+Pulls dotty itself, then pulls all repos (or a specific one) and re-runs the full symlink and hook cycle. The self-update happens before anything else so the rest of the run uses the latest version of dotty. If the dotty script changed, it re-execs itself with the original arguments so bash reads a fresh copy.
 
 ```bash
-dotty update              # pull and re-link everything
-dotty update dotfiles     # pull just one repo, re-link the full chain
+dotty update              # update dotty, pull and re-link everything
+dotty update dotfiles     # update dotty, pull just one repo, re-link the full chain
+```
+
+### `dotty self-update`
+
+Updates dotty itself without touching the chain. Useful when you just want the latest version of the tool without re-running the full install or update cycle.
+
+```bash
+dotty self-update
 ```
 
 ### `dotty add <file> [--repo <name>]`
@@ -460,6 +468,7 @@ Each test gets a fully isolated environment with a temporary `$HOME`, registry, 
 - `files.bats` — file listing and status
 - `uninstall.bats` — repo uninstallation and backup restore
 - `migrate.bats` — `.dotty/` directory layout helpers
+- `self_update.bats` — self-update logic and loop guard
 
 ## Migrating from a manual install script
 
