@@ -8,6 +8,7 @@ _DOTTY_LIB_LOADED=1
 
 # Logging
 
+COLOR_MAGENTA="\033[35m"
 COLOR_BLUE="\033[34m"
 COLOR_GREEN="\033[32m"
 COLOR_RED="\033[31m"
@@ -17,11 +18,17 @@ COLOR_DIM="\033[2m"
 COLOR_BOLD="\033[1m"
 COLOR_NONE="\033[0m"
 
-title()   { echo -e "${COLOR_BLUE}==>${COLOR_NONE} ${COLOR_BOLD}$1${COLOR_NONE}"; }
-info()    { echo -e "$1"; }
-success() { echo -e "${COLOR_GREEN}$1${COLOR_NONE}"; }
-warning() { echo -e "${COLOR_YELLOW}Warning: ${COLOR_NONE}$1"; }
-die()     { echo -e "${COLOR_RED}Error: ${COLOR_NONE}$1" >&2; exit 1; }
+# Respect NO_COLOR (https://no-color.org) and disable colors when not a TTY
+if [[ -n "${NO_COLOR:-}" ]] || [[ ! -t 1 ]]; then
+    COLOR_MAGENTA="" COLOR_BLUE="" COLOR_GREEN="" COLOR_RED="" COLOR_YELLOW=""
+    COLOR_DIM="" COLOR_BOLD="" COLOR_NONE=""
+fi
+
+title()   { echo -e "${COLOR_MAGENTA}${COLOR_BOLD}$1${COLOR_NONE}"; }
+info()    { echo -e "  $1"; }
+success() { echo -e "  ${COLOR_GREEN}✔${COLOR_NONE} $1"; }
+warning() { echo -e "  ${COLOR_YELLOW}⚠${COLOR_NONE} $1" >&2; }
+die()     { echo -e "  ${COLOR_RED}✖${COLOR_NONE} $1" >&2; exit 1; }
 
 verbose_info() {
     if [[ "${DOTTY_VERBOSE:-false}" == "true" ]]; then

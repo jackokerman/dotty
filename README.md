@@ -366,11 +366,11 @@ Available functions:
 
 | Function | Description |
 |---|---|
-| `title "msg"` | Bold heading with blue `==>` arrow prefix |
-| `info "msg"` | Plain progress message |
-| `success "msg"` | Green success message |
-| `warning "msg"` | Yellow warning message |
-| `die "msg"` | Red error message, exits with code 1 |
+| `title "msg"` | Bold magenta section heading |
+| `info "msg"` | Indented progress message |
+| `success "msg"` | Green `✔`-prefixed success message |
+| `warning "msg"` | Yellow `⚠`-prefixed warning (stderr) |
+| `die "msg"` | Red `✖`-prefixed error (stderr), exits with code 1 |
 | `verbose_info "msg"` | Info message that only prints when `DOTTY_VERBOSE` is `"true"` |
 | `should_exclude "name"` | Returns 0 if a filename matches dotty's exclusion list |
 | `create_symlink src dest` | Creates a symlink, handling backups and updates |

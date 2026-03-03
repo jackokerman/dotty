@@ -14,9 +14,13 @@ COLOR_GREEN="\033[32m"
 COLOR_RED="\033[31m"
 COLOR_NONE="\033[0m"
 
-info()    { echo -e "$1"; }
-success() { echo -e "${COLOR_GREEN}$1${COLOR_NONE}"; }
-die()     { echo -e "${COLOR_RED}Error: ${COLOR_NONE}$1" >&2; exit 1; }
+if [[ -n "${NO_COLOR:-}" ]] || [[ ! -t 1 ]]; then
+    COLOR_GREEN="" COLOR_RED="" COLOR_NONE=""
+fi
+
+info()    { echo -e "  $1"; }
+success() { echo -e "  ${COLOR_GREEN}✔${COLOR_NONE} $1"; }
+die()     { echo -e "  ${COLOR_RED}✖${COLOR_NONE} $1" >&2; exit 1; }
 
 echo ""
 echo "  Installing dotty..."
