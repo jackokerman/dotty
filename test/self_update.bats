@@ -5,23 +5,10 @@ load test_helper
 setup() {
     setup_test_env
     load_dotty
-    _ORIGINAL_ARGS=(update)
 }
 
 teardown() {
     teardown_test_env
-}
-
-@test "self_update: skips when DOTTY_SELF_UPDATED=1" {
-    # Create a git repo at DOTTY_DIR so we don't bail on the .git check
-    git init "$DOTTY_DIR" >/dev/null 2>&1
-    (cd "$DOTTY_DIR" && git commit --allow-empty -m "init" >/dev/null 2>&1)
-
-    export DOTTY_SELF_UPDATED=1
-    run self_update
-    [[ "$status" -eq 0 ]]
-    # Should produce no output (early return)
-    [[ -z "$output" ]]
 }
 
 @test "self_update: skips when DOTTY_DIR is not a git repo" {

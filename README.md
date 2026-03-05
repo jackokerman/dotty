@@ -202,7 +202,7 @@ dotty install                                          # re-run install on exist
 
 ### `dotty update [name]`
 
-Pulls dotty itself, then pulls all repos (or a specific one) and re-runs the full symlink and hook cycle. The self-update happens before anything else so the rest of the run uses the latest version of dotty. If the dotty script changed, it re-execs itself with the original arguments so bash reads a fresh copy.
+Pulls dotty itself, then pulls all repos (or a specific one) and re-runs the full symlink and hook cycle. The self-update happens before anything else so the updated script is ready for the next invocation. The script body is wrapped in `{ ... }` braces so bash reads it fully into memory, making mid-run file changes safe.
 
 ```bash
 dotty update              # update dotty, pull and re-link everything

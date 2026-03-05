@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # dotty - a dotfiles manager with overlay semantics
+{
 
 set -euo pipefail
 
@@ -259,24 +260,28 @@ pull_if_clean() {
         return 0
     fi
 
-    if (cd "$dir" && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null); then
-        info "Pulling $(basename "$dir")..."
-        (cd "$dir" && git pull --ff-only 2>/dev/null) || warning "Failed to pull $(basename "$dir")"
-    else
-        warning "$(basename "$dir") has uncommitted changes, skipping pull."
+    local stashed=false
+    if ! (cd "$dir" && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null); then
+        info "Stashing changes in $(basename "$dir")..."
+        (cd "$dir" && git stash --quiet 2>/dev/null) && stashed=true
+    fi
+
+    info "Pulling $(basename "$dir")..."
+    if ! (cd "$dir" && git pull --rebase 2>/dev/null); then
+        warning "Failed to pull $(basename "$dir")"
+        (cd "$dir" && git rebase --abort 2>/dev/null) || true
+    fi
+
+    if [[ "$stashed" == "true" ]]; then
+        (cd "$dir" && git stash pop --quiet 2>/dev/null) || warning "Failed to restore stashed changes in $(basename "$dir")"
     fi
 }
 
-# Pull the dotty repo itself before processing the chain. If the script
-# changed on disk, re-exec with the original args so bash reads a fresh
-# copy (bash reads scripts incrementally, so mid-flight changes can
-# corrupt execution).
+# Pull the dotty repo itself before processing the chain. The script is
+# wrapped in { ... } braces so bash reads it fully into memory before
+# executing, making mid-run file changes safe. The updated script takes
+# effect on the next invocation.
 self_update() {
-    # Guard against infinite re-exec loops.
-    if [[ "${DOTTY_SELF_UPDATED:-}" == "1" ]]; then
-        return 0
-    fi
-
     # Non-git installs (e.g. manual copy) can't self-update.
     if [[ ! -d "$DOTTY_DIR/.git" ]]; then
         return 0
@@ -287,18 +292,7 @@ self_update() {
         return 0
     fi
 
-    local before after
-    before="$(cd "$DOTTY_DIR" && git rev-parse HEAD 2>/dev/null)" || return 0
-
     pull_if_clean "$DOTTY_DIR"
-
-    after="$(cd "$DOTTY_DIR" && git rev-parse HEAD 2>/dev/null)" || return 0
-
-    if [[ "$before" != "$after" ]]; then
-        info "Dotty updated, restarting..."
-        export DOTTY_SELF_UPDATED=1
-        exec "$DOTTY_DIR/dotty" "${_ORIGINAL_ARGS[@]}"
-    fi
 }
 
 process_repo() {
@@ -744,7 +738,7 @@ cmd_unregister() {
     success "Unregistered $name"
 }
 
-_guard_hook_path() {
+_resolve_script_dir() {
     # Resolve through symlinks so this works when invoked via ~/.dotty/bin/dotty.
     local script="$0"
     while [[ -L "$script" ]]; do
@@ -756,8 +750,12 @@ _guard_hook_path() {
             script="$(dirname "$script")/$target"
         fi
     done
+    (cd "$(dirname "$script")" && pwd)
+}
+
+_guard_hook_path() {
     local script_dir
-    script_dir="$(cd "$(dirname "$script")" && pwd)"
+    script_dir="$(_resolve_script_dir)"
 
     if [[ -f "$script_dir/hooks/pre-commit" ]]; then
         echo "$script_dir/hooks/pre-commit"
@@ -1139,8 +1137,6 @@ cmd_version() {
 # Main dispatch
 
 main() {
-    _ORIGINAL_ARGS=("$@")
-
     local args=()
     for arg in "$@"; do
         case "$arg" in
@@ -1177,3 +1173,4 @@ main() {
 }
 
 main "$@"
+}
