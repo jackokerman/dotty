@@ -487,13 +487,29 @@ Machines without dotty keep working. As you install dotty on each machine, they 
 
 ## Auto-sync on login
 
-If you want dotfiles to stay current on remote machines without remembering to run `dotty update`, add this to your `.zshrc` or `.bashrc`:
+If you want dotfiles to stay current on remote machines without remembering to run `dotty update`, add this to your `.zshrc`:
 
 ```bash
-if command -v dotty >/dev/null 2>&1; then
-    (dotty update &>/dev/null &)
-fi
+# Background sync: run dotty update once after first prompt appears
+__dotty_sync_done=0
+
+__dotty_background_sync() {
+    if (( __dotty_sync_done )); then
+        return
+    fi
+    __dotty_sync_done=1
+
+    if command -v dotty >/dev/null 2>&1; then
+        (dotty update &>/dev/null &)
+    fi
+
+    # Remove this function from precmd after first run
+    add-zsh-hook -d precmd __dotty_background_sync
+}
+
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd __dotty_background_sync
 ```
 
-This runs `dotty update` in the background on every shell startup. It won't block your prompt and it's safe to run repeatedly since it's just `git pull` plus idempotent symlink creation.
+This uses zsh's `precmd` hook to run `dotty update` in the background after the first prompt appears. The hook removes itself after the first run, ensuring the update happens exactly once per shell session. This approach is compatible with instant prompt systems like powerlevel10k, which can crash if background jobs spawn during shell initialization.
 
