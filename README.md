@@ -485,31 +485,57 @@ fi
 
 Machines without dotty keep working. As you install dotty on each machine, they start using the new path.
 
-## Auto-sync on login
+## Staleness reminders
 
-If you want dotfiles to stay current on remote machines without remembering to run `dotty update`, add this to your `.zshrc`:
+If you want a nudge when dotfiles are out of date, add a staleness check to your `.zshrc`. This reads the dotty registry to find repo paths, checks each repo's `.git/FETCH_HEAD` mtime, and prints a reminder if any repo hasn't been fetched in over a day.
 
 ```bash
-# Background sync: run dotty update once after first prompt appears
-__dotty_sync_done=0
+# Staleness check: remind once per session if dotfiles haven't been synced recently
+__dotty_stale_check_done=0
 
-__dotty_background_sync() {
-    if (( __dotty_sync_done )); then
+__dotty_stale_check() {
+    if (( __dotty_stale_check_done )); then
         return
     fi
-    __dotty_sync_done=1
+    __dotty_stale_check_done=1
+    add-zsh-hook -d precmd __dotty_stale_check
 
-    if command -v dotty >/dev/null 2>&1; then
-        (dotty update &>/dev/null &)
+    local registry="$HOME/.dotty/registry"
+    [[ -f "$registry" ]] || return
+
+    local -A seen
+    local max_age=0
+    local threshold=$((86400))  # 1 day in seconds
+    local now=$(date +%s)
+
+    while IFS='=' read -r _ repo_path; do
+        [[ -z "$repo_path" ]] && continue
+        [[ -n "${seen[$repo_path]}" ]] && continue
+        seen[$repo_path]=1
+
+        local fetch_head="$repo_path/.git/FETCH_HEAD"
+        [[ -f "$fetch_head" ]] || continue
+
+        local mtime
+        if [[ "$OSTYPE" == darwin* ]]; then
+            mtime=$(stat -f %m "$fetch_head" 2>/dev/null) || continue
+        else
+            mtime=$(stat -c %Y "$fetch_head" 2>/dev/null) || continue
+        fi
+
+        local age=$(( now - mtime ))
+        (( age > max_age )) && max_age=$age
+    done < "$registry"
+
+    if (( max_age > threshold )); then
+        local days=$(( max_age / 86400 ))
+        print -P "%F{yellow}dotfiles haven't been synced in ${days} days. Run 'dotty update' to refresh.%f"
     fi
-
-    # Remove this function from precmd after first run
-    add-zsh-hook -d precmd __dotty_background_sync
 }
 
 autoload -Uz add-zsh-hook
-add-zsh-hook precmd __dotty_background_sync
+add-zsh-hook precmd __dotty_stale_check
 ```
 
-This uses zsh's `precmd` hook to run `dotty update` in the background after the first prompt appears. The hook removes itself after the first run, ensuring the update happens exactly once per shell session. This approach is compatible with instant prompt systems like powerlevel10k, which can crash if background jobs spawn during shell initialization.
+The check is synchronous but effectively instant since it only runs `stat` on a few files. It uses a `precmd` hook with a one-shot guard so it runs once per session without cluttering every prompt. The registry is deduplicated by path to avoid double-counting aliases (e.g., `s` and `stripe-dotfiles` pointing to the same directory).
 
