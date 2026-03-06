@@ -487,55 +487,22 @@ Machines without dotty keep working. As you install dotty on each machine, they 
 
 ## Staleness reminders
 
-If you want a nudge when dotfiles are out of date, add a staleness check to your `.zshrc`. This reads the dotty registry to find repo paths, checks each repo's `.git/FETCH_HEAD` mtime, and prints a reminder if any repo hasn't been fetched in over a day.
+`dotty check` warns if any registered repo hasn't been fetched in over a day. It reads the registry, deduplicates by path, checks `.git/FETCH_HEAD` mtime for each repo, and exits 1 with a warning if anything is stale. Override the threshold (in seconds) with `DOTTY_CHECK_THRESHOLD`.
+
+To get a nudge on each new shell session, add a one-shot `precmd` hook to your `.zshrc`:
 
 ```bash
-# Staleness check: remind once per session if dotfiles haven't been synced recently
-__dotty_stale_check_done=0
-
-__dotty_stale_check() {
-    if (( __dotty_stale_check_done )); then
-        return
-    fi
-    __dotty_stale_check_done=1
-    add-zsh-hook -d precmd __dotty_stale_check
-
-    local registry="$HOME/.dotty/registry"
-    [[ -f "$registry" ]] || return
-
-    local -A seen
-    local max_age=0
-    local threshold=$((86400))  # 1 day in seconds
-    local now=$(date +%s)
-
-    while IFS='=' read -r _ repo_path; do
-        [[ -z "$repo_path" ]] && continue
-        [[ -n "${seen[$repo_path]}" ]] && continue
-        seen[$repo_path]=1
-
-        local fetch_head="$repo_path/.git/FETCH_HEAD"
-        [[ -f "$fetch_head" ]] || continue
-
-        local mtime
-        if [[ "$OSTYPE" == darwin* ]]; then
-            mtime=$(stat -f %m "$fetch_head" 2>/dev/null) || continue
-        else
-            mtime=$(stat -c %Y "$fetch_head" 2>/dev/null) || continue
-        fi
-
-        local age=$(( now - mtime ))
-        (( age > max_age )) && max_age=$age
-    done < "$registry"
-
-    if (( max_age > threshold )); then
-        local days=$(( max_age / 86400 ))
-        print -P "%F{yellow}dotfiles haven't been synced in ${days} days. Run 'dotty update' to refresh.%f"
-    fi
+# Remind once per session if dotfiles are stale
+__dotty_check_done=0
+__dotty_check() {
+    (( __dotty_check_done )) && return
+    __dotty_check_done=1
+    add-zsh-hook -d precmd __dotty_check
+    command -v dotty >/dev/null 2>&1 && dotty check
 }
-
 autoload -Uz add-zsh-hook
-add-zsh-hook precmd __dotty_stale_check
+add-zsh-hook precmd __dotty_check
 ```
 
-The check is synchronous but effectively instant since it only runs `stat` on a few files. It uses a `precmd` hook with a one-shot guard so it runs once per session without cluttering every prompt. The registry is deduplicated by path to avoid double-counting aliases (e.g., `s` and `stripe-dotfiles` pointing to the same directory).
+The hook defers to `precmd` so it doesn't block p10k instant prompt, and the one-shot guard ensures it only runs once per session.
 

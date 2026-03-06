@@ -1106,6 +1106,7 @@ Commands:
   unregister <name>        Remove a repo from the registry
   files [repo]             List all managed files, grouped by repo
   trace <path>             Show which repo a file or directory comes from
+  check                    Warn if repos haven't been fetched recently
   guard [path]             Install pre-commit hook to block sensitive content
   unguard [path]           Remove the dotty pre-commit hook
   help                     Show this help
@@ -1132,6 +1133,40 @@ EOF
 
 cmd_version() {
     echo "dotty $DOTTY_VERSION"
+}
+
+cmd_check() {
+    local threshold="${DOTTY_CHECK_THRESHOLD:-86400}"
+    local now
+    now="$(date +%s)"
+
+    declare -A seen
+    local max_age=0
+
+    while IFS='=' read -r _ repo_path; do
+        [[ -z "$repo_path" ]] && continue
+        [[ -n "${seen[$repo_path]:-}" ]] && continue
+        seen[$repo_path]=1
+
+        local fetch_head="$repo_path/.git/FETCH_HEAD"
+        [[ -f "$fetch_head" ]] || continue
+
+        local mtime
+        if [[ "$OSTYPE" == darwin* ]]; then
+            mtime="$(stat -f %m "$fetch_head" 2>/dev/null)" || continue
+        else
+            mtime="$(stat -c %Y "$fetch_head" 2>/dev/null)" || continue
+        fi
+
+        local age=$(( now - mtime ))
+        (( age > max_age )) && max_age=$age
+    done < "$DOTTY_REGISTRY"
+
+    if (( max_age > threshold )); then
+        local days=$(( max_age / 86400 ))
+        warning "Dotfiles haven't been synced in ${days} days. Run 'dotty update' to refresh."
+        return 1
+    fi
 }
 
 # Main dispatch
@@ -1164,6 +1199,7 @@ main() {
         unregister)   cmd_unregister "$@" ;;
         files)        cmd_files "$@" ;;
         trace)        cmd_trace "$@" ;;
+        check)        cmd_check "$@" ;;
         guard)        cmd_guard "$@" ;;
         unguard)      cmd_unguard "$@" ;;
         help|--help)  cmd_help ;;
