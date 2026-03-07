@@ -24,11 +24,11 @@ if [[ -n "${NO_COLOR:-}" ]] || [[ ! -t 1 ]]; then
     COLOR_DIM="" COLOR_BOLD="" COLOR_NONE=""
 fi
 
-title()   { echo -e "${COLOR_MAGENTA}${COLOR_BOLD}$1${COLOR_NONE}"; }
-info()    { echo -e "  $1"; }
-success() { echo -e "  ${COLOR_GREEN}✔${COLOR_NONE} $1"; }
-warning() { echo -e "  ${COLOR_YELLOW}⚠${COLOR_NONE} $1" >&2; }
-die()     { echo -e "  ${COLOR_RED}✖${COLOR_NONE} $1" >&2; exit 1; }
+title()   { echo -e "${COLOR_MAGENTA}${COLOR_BOLD}● $1${COLOR_NONE}"; }
+info()    { echo -e "· $1"; }
+success() { echo -e "${COLOR_GREEN}✔ $1${COLOR_NONE}"; }
+warning() { echo -e "${COLOR_YELLOW}⚠ $1${COLOR_NONE}" >&2; }
+die()     { echo -e "${COLOR_RED}✖ $1${COLOR_NONE}" >&2; exit 1; }
 
 verbose_info() {
     if [[ "${DOTTY_VERBOSE:-false}" == "true" ]]; then

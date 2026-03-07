@@ -611,7 +611,7 @@ cmd_add() {
     success "Linked: ~/$rel_path"
     echo ""
     info "Don't forget to commit the new file:"
-    echo -e "  ${COLOR_DIM}cd $repo_path && git add home/$rel_path${COLOR_NONE}"
+    echo -e "${COLOR_DIM}· cd $repo_path && git add home/$rel_path${COLOR_NONE}"
 }
 
 cmd_status() {
@@ -640,7 +640,7 @@ cmd_status() {
             [[ -n "$chain_str" ]] && chain_str+=" → "
             chain_str+="${CHAIN_NAMES[$i]}"
         done
-        echo -e "  Chain: ${COLOR_GREEN}$chain_str${COLOR_NONE}"
+        echo -e "· Chain: ${COLOR_GREEN}$chain_str${COLOR_NONE}"
     fi
 
     local env=""
@@ -648,7 +648,7 @@ cmd_status() {
         env="$(detect_environment 2>/dev/null)" || true
     fi
     if [[ -n "$env" ]]; then
-        echo -e "  Env:   ${COLOR_GREEN}$env${COLOR_NONE}"
+        echo -e "· Env:   ${COLOR_GREEN}$env${COLOR_NONE}"
     fi
 
     echo ""
@@ -698,7 +698,7 @@ cmd_status() {
             link_summary+=", ${not_linked} unlinked"
         fi
 
-        echo -e "  $status_icon $name ${COLOR_DIM}($rpath) [$status_text] [$link_summary]${COLOR_NONE}"
+        echo -e "$status_icon $name ${COLOR_DIM}($rpath) [$status_text] [$link_summary]${COLOR_NONE}"
     done
 }
 
@@ -978,13 +978,13 @@ cmd_files() {
 
         case "$status" in
             linked)
-                echo -e "  ${COLOR_GREEN}✓${COLOR_NONE} ~/$rel"
+                echo -e "${COLOR_GREEN}✓ ~/$rel${COLOR_NONE}"
                 ;;
             overridden)
-                echo -e "  ${COLOR_DIM}○ ~/$rel (overridden)${COLOR_NONE}"
+                echo -e "${COLOR_DIM}○ ~/$rel (overridden)${COLOR_NONE}"
                 ;;
             not_linked)
-                echo -e "  ${COLOR_YELLOW}● ~/$rel (not linked)${COLOR_NONE}"
+                echo -e "${COLOR_YELLOW}● ~/$rel (not linked)${COLOR_NONE}"
                 ;;
         esac
     done
@@ -1029,7 +1029,7 @@ cmd_trace() {
                     [[ -n "$name" ]] || continue
                     if [[ "$link_target" == "$rpath/home/"* || "$link_target" == "$rpath/"*/home/* ]]; then
                         local rel="${link_target#"$rpath"/}"
-                        echo -e "  ~${item#"$HOME"}  →  ${COLOR_GREEN}$name${COLOR_NONE} ($rel)"
+                        echo -e "· ~${item#"$HOME"}  →  ${COLOR_GREEN}$name${COLOR_NONE} ($rel)"
                         found=$((found + 1))
                     fi
                 done < "$DOTTY_REGISTRY"

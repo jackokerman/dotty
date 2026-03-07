@@ -1,6 +1,6 @@
-# dotty
+# ·· dotty ··
 
-A dotfiles manager written in bash. No dependencies beyond `bash` and `git`.
+A dotfiles manager written in bash · No dependencies beyond `bash` and `git`.
 
 Dotty manages chains of dotfiles repositories where later repos override earlier ones. You keep personal dotfiles in one repo and work-specific overrides in another, and dotty layers them together with later repos winning on conflicts. It also supports environment-specific overlays within a single repo, so the same dotfiles can behave differently on your laptop vs. a remote dev server.
 
@@ -243,11 +243,11 @@ Shows registered repos, the resolved chain order, detected environment, git stat
 ```
 dotty status
 
-  Chain: dotfiles → work-dotfiles
-  Env:   laptop
+· Chain: dotfiles → work-dotfiles
+· Env:   laptop
 
-  ✓ dotfiles (/home/you/dotfiles) [clean] [32 linked, 1 unlinked]
-  ● work-dotfiles (/home/you/work-dotfiles) [modified] [15 linked]
+✓ dotfiles (/home/you/dotfiles) [clean] [32 linked, 1 unlinked]
+● work-dotfiles (/home/you/work-dotfiles) [modified] [15 linked]
 ```
 
 ### `dotty files [repo]`
@@ -374,11 +374,11 @@ Available functions:
 
 | Function | Description |
 |---|---|
-| `title "msg"` | Bold magenta section heading |
-| `info "msg"` | Indented progress message |
-| `success "msg"` | Green `✔`-prefixed success message |
-| `warning "msg"` | Yellow `⚠`-prefixed warning (stderr) |
-| `die "msg"` | Red `✖`-prefixed error (stderr), exits with code 1 |
+| `title "msg"` | `●`-prefixed bold magenta heading (full line colored) |
+| `info "msg"` | `·`-prefixed plain message |
+| `success "msg"` | `✔`-prefixed green message (full line colored) |
+| `warning "msg"` | `⚠`-prefixed yellow warning to stderr (full line colored) |
+| `die "msg"` | `✖`-prefixed red error to stderr (full line colored), exits with code 1 |
 | `verbose_info "msg"` | Info message that only prints when `DOTTY_VERBOSE` is `"true"` |
 | `should_exclude "name"` | Returns 0 if a filename matches dotty's exclusion list |
 | `create_symlink src dest` | Creates a symlink, handling backups and updates |
