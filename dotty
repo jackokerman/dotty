@@ -101,6 +101,15 @@ read_config() {
     [[ -n "$DOTTY_NAME" ]] || die "DOTTY_NAME is required in $conf"
 }
 
+_is_declared_env() {
+    local name="$1"
+    local env
+    for env in "${DOTTY_ENVIRONMENTS[@]}"; do
+        [[ "$env" == "$name" ]] && return 0
+    done
+    return 1
+}
+
 # Chain resolution
 
 CHAIN_NAMES=()
@@ -305,11 +314,20 @@ process_repo() {
 
     title "Processing $name"
 
+    local do_env_overlay=false
+    if [[ -n "$env" && ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]]; then
+        if _is_declared_env "$env"; then
+            [[ -d "$repo_dir/$env/home" ]] && do_env_overlay=true
+        else
+            warning "Detected environment '$env' not in DOTTY_ENVIRONMENTS for $name"
+        fi
+    fi
+
     # Clean up orphan symlinks (files removed from repo since last link)
     if [[ -d "$repo_dir/home" ]]; then
         cleanup_orphans "$repo_dir/home" "$HOME"
     fi
-    if [[ -n "$env" && -d "$repo_dir/$env/home" ]]; then
+    if [[ "$do_env_overlay" == "true" ]]; then
         cleanup_orphans "$repo_dir/$env/home" "$HOME"
     fi
 
@@ -320,7 +338,7 @@ process_repo() {
     fi
 
     # Environment overlay: $env/home/ → $HOME
-    if [[ -n "$env" && -d "$repo_dir/$env/home" ]]; then
+    if [[ "$do_env_overlay" == "true" ]]; then
         info "Linking $env/home/ overlay"
         create_symlinks_from_dir "$repo_dir/$env/home" "$HOME"
     fi
@@ -520,8 +538,10 @@ cmd_uninstall() {
         resolve_chain_from_leaf 2>/dev/null || true
     fi
     env="$(detect_environment 2>/dev/null)" || true
-    if [[ -n "$env" && -d "$target_path/$env/home" ]]; then
-        remove_repo_symlinks "$target_path/$env/home" "$HOME"
+    if [[ -n "$env" && ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]] && _is_declared_env "$env"; then
+        if [[ -d "$target_path/$env/home" ]]; then
+            remove_repo_symlinks "$target_path/$env/home" "$HOME"
+        fi
     fi
 
     local summary="${_UNLINK_COUNT} symlink(s) removed"
@@ -649,6 +669,21 @@ cmd_status() {
     fi
     if [[ -n "$env" ]]; then
         echo -e "· Env:   ${COLOR_GREEN}$env${COLOR_NONE}"
+
+        local overlay_repos=()
+        for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+            if [[ -d "${CHAIN_PATHS[$i]}/$env/home" ]]; then
+                if _has_config "${CHAIN_PATHS[$i]}"; then
+                    read_config "${CHAIN_PATHS[$i]}"
+                    if [[ ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]] && _is_declared_env "$env"; then
+                        overlay_repos+=("${CHAIN_NAMES[$i]}")
+                    fi
+                fi
+            fi
+        done
+        if [[ ${#overlay_repos[@]} -gt 0 ]]; then
+            echo -e "         ${COLOR_DIM}overlays: ${overlay_repos[*]}${COLOR_NONE}"
+        fi
     fi
 
     echo ""
@@ -680,7 +715,12 @@ cmd_status() {
         _FILE_LINES=()
         _files_walk "$rpath/home" "" "$name"
         if [[ -n "$env" && -d "$rpath/$env/home" ]]; then
-            _files_walk "$rpath/$env/home" "" "$name"
+            if _has_config "$rpath"; then
+                read_config "$rpath"
+                if [[ ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]] && _is_declared_env "$env"; then
+                    _files_walk "$rpath/$env/home" "" "$name"
+                fi
+            fi
         fi
         for fl in "${_FILE_LINES[@]}"; do
             case "${fl%%|*}" in
@@ -948,7 +988,12 @@ cmd_files() {
 
         # Environment overlay
         if [[ -n "$env" && -d "$rpath/$env/home" ]]; then
-            _files_walk "$rpath/$env/home" "" "$name"
+            if _has_config "$rpath"; then
+                read_config "$rpath"
+                if [[ ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]] && _is_declared_env "$env"; then
+                    _files_walk "$rpath/$env/home" "" "$name"
+                fi
+            fi
         fi
     done
 

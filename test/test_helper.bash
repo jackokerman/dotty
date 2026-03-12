@@ -106,6 +106,17 @@ add_repo_file() {
     echo "$content" > "$full_path"
 }
 
+# Add a file to a test repo's environment overlay directory.
+# Usage: add_env_file "repo_path" "env_name" "relative/path" ["content"]
+add_env_file() {
+    local repo_dir="$1"
+    local env_name="$2"
+    local rel_path="$3"
+    local content="${4:-test content}"
+    mkdir -p "$(dirname "$repo_dir/$env_name/home/$rel_path")"
+    echo "$content" > "$repo_dir/$env_name/home/$rel_path"
+}
+
 # Register a test repo in the fake registry.
 register_test_repo() {
     local name="$1"
