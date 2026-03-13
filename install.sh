@@ -64,6 +64,14 @@ if [[ -f "$DOTTY_DIR/completions/_dotty" ]]; then
     info "Zsh completions available"
 fi
 
+# Symlink completion to standard XDG location so it's on fpath without
+# needing to know where dotty is installed
+site_functions="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"
+mkdir -p "$site_functions"
+if [[ -f "$DOTTY_DIR/completions/_dotty" ]]; then
+    ln -sf "$DOTTY_DIR/completions/_dotty" "$site_functions/_dotty"
+fi
+
 # Add dotty to PATH in .bashrc (zsh users: dotfiles handle PATH and completions)
 if [[ -f "$HOME/.bashrc" ]] && ! grep -qF '.dotty/bin' "$HOME/.bashrc"; then
     echo "" >> "$HOME/.bashrc"

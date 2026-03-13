@@ -388,11 +388,13 @@ The library uses a double-source guard, so sourcing it multiple times is safe.
 
 ## Shell completions
 
-Dotty ships zsh completions in `~/.dotty/completions/`. To use them, add the directory to your `fpath` before `compinit` runs:
+Dotty ships zsh completions in `~/.dotty/completions/`. The installer automatically symlinks `_dotty` into `~/.local/share/zsh/site-functions/`, which is the standard XDG location for zsh completions. As long as that directory is on your `fpath` before `compinit`, completions work out of the box.
+
+If you need to add the directory manually:
 
 ```zsh
 # In your .zshrc, before compinit:
-fpath=("$HOME/.dotty/completions" $fpath)
+fpath=("$HOME/.local/share/zsh/site-functions" $fpath)
 ```
 
 Once loaded, completions cover subcommands (`dotty <TAB>`), repo names (`dotty update <TAB>`), file paths (`dotty add <TAB>`), and the `--repo` flag.
