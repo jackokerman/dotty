@@ -105,7 +105,7 @@ read_config() {
 _is_declared_env() {
     local name="$1"
     local env
-    for env in "${DOTTY_ENVIRONMENTS[@]}"; do
+    for env in ${DOTTY_ENVIRONMENTS[@]+"${DOTTY_ENVIRONMENTS[@]}"}; do
         [[ "$env" == "$name" ]] && return 0
     done
     return 1
@@ -123,21 +123,21 @@ resolve_chain() {
 
     read_config "$repo_dir"
     local name="$DOTTY_NAME"
-    local -a extends=("${DOTTY_EXTENDS[@]}")
+    local -a extends=(${DOTTY_EXTENDS[@]+"${DOTTY_EXTENDS[@]}"})
 
     # Skip if already resolved (diamond dependency deduplication)
-    for existing in "${CHAIN_NAMES[@]}"; do
+    for existing in ${CHAIN_NAMES[@]+"${CHAIN_NAMES[@]}"}; do
         [[ "$existing" == "$name" ]] && return 0
     done
 
     # Cycle detection (only tracks the current recursion stack)
-    for r in "${_RESOLVING[@]}"; do
+    for r in ${_RESOLVING[@]+"${_RESOLVING[@]}"}; do
         [[ "$r" == "$name" ]] && die "Dependency cycle detected: $name"
     done
     _RESOLVING+=("$name")
 
     # Resolve parents first (so base repos come first in chain)
-    for parent_url in "${extends[@]}"; do
+    for parent_url in ${extends[@]+"${extends[@]}"}; do
         local parent_dir
         parent_dir="$(ensure_repo "$parent_url")"
         resolve_chain "$parent_dir"
@@ -170,12 +170,12 @@ resolve_chain_from_leaf() {
         resolve_chain "$rpath" 2>/dev/null || true
         if [[ ${#CHAIN_NAMES[@]} -gt $best_len ]]; then
             best_len=${#CHAIN_NAMES[@]}
-            best_names=("${CHAIN_NAMES[@]}")
-            best_paths=("${CHAIN_PATHS[@]}")
+            best_names=(${CHAIN_NAMES[@]+"${CHAIN_NAMES[@]}"})
+            best_paths=(${CHAIN_PATHS[@]+"${CHAIN_PATHS[@]}"})
         fi
     done
-    CHAIN_NAMES=("${best_names[@]}")
-    CHAIN_PATHS=("${best_paths[@]}")
+    CHAIN_NAMES=(${best_names[@]+"${best_names[@]}"})
+    CHAIN_PATHS=(${best_paths[@]+"${best_paths[@]}"})
 }
 
 ensure_repo() {
@@ -743,7 +743,7 @@ cmd_status() {
                 fi
             fi
         fi
-        for fl in "${_FILE_LINES[@]}"; do
+        for fl in ${_FILE_LINES[@]+"${_FILE_LINES[@]}"}; do
             case "${fl%%|*}" in
                 linked)     linked=$((linked + 1)) ;;
                 overridden) overridden=$((overridden + 1)) ;;
@@ -1027,7 +1027,7 @@ cmd_files() {
     local current_repo=""
     # Sort by repo name then path
     local -a sorted
-    IFS=$'\n' sorted=($(printf '%s\n' "${_FILE_LINES[@]}" | sort -t'|' -k3,3 -k2,2))
+    IFS=$'\n' sorted=($(printf '%s\n' ${_FILE_LINES[@]+"${_FILE_LINES[@]}"} | sort -t'|' -k3,3 -k2,2))
     unset IFS
 
     for line in "${sorted[@]}"; do
@@ -1286,7 +1286,7 @@ main() {
             *) args+=("$arg") ;;
         esac
     done
-    set -- "${args[@]}"
+    set -- ${args[@]+"${args[@]}"}
     export DOTTY_VERBOSE
     export DOTTY_DRY_RUN
 
