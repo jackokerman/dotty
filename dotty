@@ -1246,13 +1246,13 @@ cmd_check() {
     local now
     now="$(date +%s)"
 
-    declare -A seen
+    local seen=""
     local max_age=0
 
     while IFS='=' read -r _ repo_path; do
         [[ -z "$repo_path" ]] && continue
-        [[ -n "${seen[$repo_path]:-}" ]] && continue
-        seen[$repo_path]=1
+        case "$seen" in *"|${repo_path}|"*) continue ;; esac
+        seen="${seen}|${repo_path}|"
 
         local fetch_head="$repo_path/.git/FETCH_HEAD"
         [[ -f "$fetch_head" ]] || continue
