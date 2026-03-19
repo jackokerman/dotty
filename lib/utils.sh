@@ -215,6 +215,7 @@ create_symlink() {
 
     if ln -s "$source" "$target"; then
         success "Linked: ~${target#"$HOME"}"
+        _DOTTY_CHANGES_MADE=true
     else
         warning "Failed to link: ~${target#"$HOME"}"
         _LINK_FAIL_COUNT=$((_LINK_FAIL_COUNT + 1))

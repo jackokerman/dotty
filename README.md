@@ -274,6 +274,18 @@ dotty trace ~/.config/git
 # ~/.config/git/ignore  →  work-dotfiles (home/.config/git/ignore)
 ```
 
+### `dotty shell-init`
+
+Outputs a shell wrapper function that automatically reloads your shell after `dotty install` or `dotty update` makes changes. Add this to your `.zshrc` or `.bashrc`:
+
+```bash
+eval "$(dotty shell-init)"
+```
+
+The wrapper replaces the `dotty` command with a function that calls the real binary, then checks for a reload marker file. If changes were detected (new symlinks created, repos pulled with new commits), it runs `exec $SHELL` to pick up the new config. If nothing changed, no reload happens.
+
+Supports zsh and bash. The detection is based on `$SHELL`, not the running shell.
+
 ### `dotty uninstall <name>`
 
 Cleanly removes a repo by deleting its symlinks from `$HOME`, restoring any backed-up files, and unregistering it. This is the reverse of `install` for a single repo.
@@ -445,7 +457,8 @@ Dotty stores everything in `~/.dotty/`:
 ├── registry            # name=path, one per line
 ├── repos/              # auto-cloned repos
 ├── backups/            # backed-up files replaced by symlinks
-└── completions/        # shell completions
+├── completions/        # shell completions
+└── .needs-reload       # marker for shell-init wrapper (transient)
 ```
 
 When dotty creates a symlink where a real file already exists, it moves the original to `~/.dotty/backups/` (preserving the path structure) before linking.
@@ -471,6 +484,7 @@ Each test gets a fully isolated environment with a temporary `$HOME`, registry, 
 - `uninstall.bats` — repo uninstallation and backup restore
 - `migrate.bats` — `.dotty/` directory layout helpers
 - `self_update.bats` — self-update logic and loop guard
+- `shell_init.bats` — shell-init output, change detection, reload marker
 
 ## Migrating from a manual install script
 

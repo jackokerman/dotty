@@ -26,6 +26,7 @@ _dotty() {
         'files:List all managed files, grouped by repo'
         'trace:Show which repo a file or directory comes from'
         'check:Warn if repos haven'\''t been fetched recently'
+        'shell-init:Output shell wrapper for auto-reload after changes'
         'guard:Install pre-commit hook to block sensitive content'
         'unguard:Remove the dotty pre-commit hook'
         'help:Show help'
@@ -73,7 +74,7 @@ _dotty() {
         guard|unguard)
             _files -/
             ;;
-        self-update)
+        self-update|shell-init)
             ;;
     esac
 }

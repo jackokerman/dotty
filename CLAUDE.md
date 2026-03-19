@@ -46,6 +46,7 @@ Dotty stores state in `~/.dotty/`:
 - `repos/` — auto-cloned dependency repos
 - `backups/` — files replaced by symlinks
 - `bin/dotty` — symlink to main script
+- `.needs-reload` — marker file created by `install`/`update` when changes were made; consumed by the `shell-init` wrapper to trigger `exec $SHELL`
 
 ## Repo configuration
 
@@ -66,7 +67,7 @@ Files in `repo/home/` are symlinked to `$HOME`. Environment overlays live in `re
 Run the automated test suite first:
 
 ```bash
-./test/bats/bin/bats test/    # run all tests (69 tests across 8 files)
+./test/bats/bin/bats test/    # run all tests
 ```
 
 Tests use isolated temp directories and don't touch real dotfiles. Test files live in `test/`:
@@ -79,6 +80,7 @@ Tests use isolated temp directories and don't touch real dotfiles. Test files li
 - `uninstall.bats` — repo uninstallation and backup restore
 - `migrate.bats` — `.dotty/` directory layout helpers
 - `self_update.bats` — self-update logic and loop guard
+- `shell_init.bats` — shell-init output, change detection, reload marker
 
 After tests pass, verify against the user's actual dotfiles repos. Use `./dotty status` or read `~/.dotty/registry` to discover what's registered on this machine. Common manual test workflows:
 
