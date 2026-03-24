@@ -503,7 +503,7 @@ Machines without dotty keep working. As you install dotty on each machine, they 
 
 ## Staleness reminders
 
-`dotty check` warns if any registered repo hasn't been fetched in over a day. It reads the registry, deduplicates by path, checks `.git/FETCH_HEAD` mtime for each repo, and exits 1 with a warning if anything is stale. Override the threshold (in seconds) with `DOTTY_CHECK_THRESHOLD`.
+`dotty check` warns if any registered repo hasn't been fetched in over a day. It reads the registry, deduplicates by path, checks `.git/FETCH_HEAD` mtime for each repo, and exits 1 with a warning if anything is stale. Override the threshold (in seconds) with `DOTTY_CHECK_THRESHOLD`. The check is automatically suppressed when `DOTTY_COMMAND` is set, which prevents duplicate warnings when a hook spawns an interactive shell during `install` or `update`.
 
 To get a nudge on each new shell session, add a one-shot `precmd` hook to your `.zshrc`:
 

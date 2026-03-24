@@ -1242,6 +1242,10 @@ cmd_version() {
 }
 
 cmd_check() {
+    # Skip if running inside a dotty hook (e.g., a hook spawned an interactive
+    # shell that sources .zshrc and calls dotty check).
+    [[ -n "${DOTTY_COMMAND:-}" ]] && return 0
+
     local threshold="${DOTTY_CHECK_THRESHOLD:-86400}"
     local now
     now="$(date +%s)"
