@@ -68,6 +68,11 @@ _is_link_ignored() {
     return 1
 }
 
+_is_gitignored() {
+    local file="$1"
+    git -C "$(dirname "$file")" check-ignore -q "$file" 2>/dev/null
+}
+
 # Remove symlinks in target_dir that point into source_dir but whose source
 # no longer exists. Scans target_dir's top-level entries for symlinks pointing
 # into source_dir, and for real directories, recurses only into subdirectories
@@ -311,6 +316,7 @@ create_symlinks_from_dir() {
 
         local rel_path="${rel_prefix:+$rel_prefix/}$name"
         _is_link_ignored "$rel_path" && continue
+        _is_gitignored "$item" && continue
 
         local target_item="$target_dir/$name"
 
@@ -327,6 +333,7 @@ create_symlinks_from_dir() {
 
         local rel_path="${rel_prefix:+$rel_prefix/}$name"
         _is_link_ignored "$rel_path" && continue
+        _is_gitignored "$item" && continue
 
         local target_item="$target_dir/$name"
         _link_item "$item" "$target_item" "$rel_prefix"

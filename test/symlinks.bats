@@ -162,6 +162,53 @@ teardown() {
     [[ -L "$TEST_HOME/.config/app/other.txt" ]]
 }
 
+@test "create_symlinks_from_dir skips gitignored files" {
+    create_test_repo "test-repo"
+    local repo_dir="$REPLY"
+
+    # Initialize a git repo so git check-ignore works
+    git -C "$repo_dir" init -q
+
+    # Add a .gitignore in a subdirectory
+    mkdir -p "$repo_dir/home/.config/zsh"
+    echo ".zcompdump" > "$repo_dir/home/.config/zsh/.gitignore"
+    echo ".zsh_history" >> "$repo_dir/home/.config/zsh/.gitignore"
+
+    # Create gitignored files (simulating zsh writing through symlinks)
+    echo "dump" > "$repo_dir/home/.config/zsh/.zcompdump"
+    echo "history" > "$repo_dir/home/.config/zsh/.zsh_history"
+
+    # Create a tracked file that should still be linked
+    echo "# zshrc" > "$repo_dir/home/.config/zsh/.zshrc"
+
+    # Pre-create target dirs so dotty recurses
+    mkdir -p "$TEST_HOME/.config/zsh"
+
+    create_symlinks_from_dir "$repo_dir/home" "$TEST_HOME"
+
+    # Tracked file should be linked
+    [[ -L "$TEST_HOME/.config/zsh/.zshrc" ]]
+
+    # Gitignored files should NOT be linked
+    [[ ! -L "$TEST_HOME/.config/zsh/.zcompdump" ]]
+    [[ ! -L "$TEST_HOME/.config/zsh/.zsh_history" ]]
+}
+
+@test "create_symlinks_from_dir links all files when repo has no git dir" {
+    create_test_repo "test-repo"
+    local repo_dir="$REPLY"
+
+    # No git init — repo is not a git repository
+    add_repo_file "$repo_dir" ".bashrc" "# bashrc"
+    add_repo_file "$repo_dir" ".profile" "# profile"
+
+    create_symlinks_from_dir "$repo_dir/home" "$TEST_HOME"
+
+    # Both should be linked (gitignore check is a no-op without .git)
+    [[ -L "$TEST_HOME/.bashrc" ]]
+    [[ -L "$TEST_HOME/.profile" ]]
+}
+
 # _explode_dir_symlink
 
 @test "_explode_dir_symlink converts dir symlink to real dir with child symlinks" {
