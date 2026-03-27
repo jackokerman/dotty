@@ -65,7 +65,7 @@ DOTTY_LINK_IGNORE=(".claude/settings.json")
 
 ### Directory layout
 
-Your repo mirrors the structure of `$HOME`. Everything in `home/` gets symlinked into `$HOME`, and environment-specific overlays live in their own directories.
+Your repo mirrors the structure of `$HOME`. Everything in `home/` gets symlinked into `$HOME`, and environment-specific overlays live in their own directories. Files matched by `.gitignore` rules in the source directory are automatically skipped, so transient files that programs write through symlinks (e.g., `.zcompdump`, `.zsh_history`) won't be re-linked on every update.
 
 ```
 my-dotfiles/
