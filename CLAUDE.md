@@ -21,7 +21,7 @@ The `dotty` script is structured as a monolithic bash program with procedural se
 7. **Commands** (`cmd_install`, `cmd_update`, `cmd_add`, `cmd_link`, `cmd_status`, etc.)
 8. **Main dispatch** (entry point routes to command functions)
 
-**Key flow (`install`):** resolve source → resolve dependency chain → register all repos → for each repo: pull, symlink `home/`, apply environment overlay, run hook (`.dotty/run.sh` or `dotty-run.sh`).
+**Key flow (`install`):** resolve source → resolve dependency chain → register all repos → for each repo: pull, symlink `home/`, apply environment overlay, run hook (`.dotty/run.sh` or `dotty-run.sh`). When installing from a URL, the source repo is cloned to `~/<basename>` for discoverability; dependencies are cloned to `~/.dotty/repos/`.
 
 **Hook environment variables:** `DOTTY_REPO_DIR` (repo path), `DOTTY_ENV` (detected environment), `DOTTY_COMMAND` (`install` or `update`). Hooks are skipped during `link`.
 

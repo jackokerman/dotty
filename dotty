@@ -180,6 +180,7 @@ resolve_chain_from_leaf() {
 
 ensure_repo() {
     local source="$1"
+    local target_dir="${2:-}"
 
     if [[ -d "$source" ]]; then
         (cd "$source" && pwd)
@@ -215,9 +216,19 @@ ensure_repo() {
         fi
     done
 
+    # If a target_dir was specified, check it before falling back to DOTTY_REPOS_DIR
+    if [[ -n "$target_dir" && -d "$target_dir" ]]; then
+        if _has_config "$target_dir"; then
+            echo "$target_dir"
+            return 0
+        else
+            die "$target_dir already exists but is not a dotty repo"
+        fi
+    fi
+
     local clone_name
     clone_name="$(basename "$source" .git)"
-    local clone_dir="$DOTTY_REPOS_DIR/$clone_name"
+    local clone_dir="${target_dir:-$DOTTY_REPOS_DIR/$clone_name}"
 
     if [[ -d "$clone_dir" ]]; then
         echo "$clone_dir"
@@ -446,7 +457,9 @@ cmd_install() {
         if [[ -d "$source" ]]; then
             repo_dir="$(cd "$source" && pwd)"
         else
-            repo_dir="$(ensure_repo "$source")"
+            local source_basename
+            source_basename="$(basename "$source" .git)"
+            repo_dir="$(ensure_repo "$source" "$HOME/$source_basename")"
         fi
 
         # Resolve full chain

@@ -104,7 +104,7 @@ DOTTY_EXTENDS=("https://github.com/you/dotfiles.git")
 Running `dotty install ~/work-dotfiles` kicks off the following:
 
 1. Reads `work-dotfiles/.dotty/config`, sees it extends personal dotfiles
-2. Clones personal dotfiles to `~/.dotty/repos/dotfiles` (if not already registered)
+2. Clones personal dotfiles to `~/.dotty/repos/dotfiles` (dependency, auto-cloned)
 3. Symlinks `dotfiles/home/` into `$HOME` (base layer)
 4. Runs `dotfiles/.dotty/run.sh`
 5. Symlinks `work-dotfiles/home/` into `$HOME` (overlay, wins on conflicts)
@@ -192,11 +192,11 @@ In practice, most environment-specific config is delivered through the extend pa
 
 The main entry point. Resolves the dependency chain, clones missing repos, creates symlinks, and runs hooks.
 
-With an argument, it sets up a new dotfiles repo (cloning dependencies as needed). Without an argument, it re-runs the full install cycle on the existing registered repos. This is useful when you want to re-trigger one-time setup scripts (like macOS defaults) that are guarded behind `DOTTY_COMMAND == "install"`.
+With an argument, it sets up a new dotfiles repo (cloning dependencies as needed). When given a URL, the source repo is cloned to `~/<basename>` (e.g., `~/work-dotfiles`) so it's easy to find and edit. Dependencies in the chain are still cloned to `~/.dotty/repos/`. Without an argument, it re-runs the full install cycle on the existing registered repos. This is useful when you want to re-trigger one-time setup scripts (like macOS defaults) that are guarded behind `DOTTY_COMMAND == "install"`.
 
 ```bash
-dotty install ~/my-dotfiles                            # first-time setup
-dotty install https://github.com/you/work-dotfiles.git # from a URL
+dotty install ~/my-dotfiles                            # first-time setup (local path)
+dotty install https://github.com/you/work-dotfiles.git # from a URL (clones to ~/work-dotfiles)
 dotty install                                          # re-run install on existing repos
 ```
 

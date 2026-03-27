@@ -135,6 +135,73 @@ EOF
     [[ "${CHAIN_NAMES[1]}" == "overlay" ]]
 }
 
+# ensure_repo with target_dir
+
+# Helper: create a bare git repo from a test repo directory
+_create_bare_repo() {
+    local source_dir="$1"
+    local bare_dir="$TEST_HOME/bare-repos/$(basename "$source_dir").git"
+    mkdir -p "$(dirname "$bare_dir")"
+    git init --bare "$bare_dir" >/dev/null 2>&1
+    git -C "$source_dir" init >/dev/null 2>&1
+    git -C "$source_dir" add -A >/dev/null 2>&1
+    git -C "$source_dir" commit -m "init" >/dev/null 2>&1
+    git -C "$source_dir" remote add origin "$bare_dir" >/dev/null 2>&1
+    git -C "$source_dir" push origin HEAD:main >/dev/null 2>&1
+    echo "$bare_dir"
+}
+
+@test "ensure_repo clones to target_dir when provided" {
+    create_test_repo "clone-target"
+    local repo_dir="$REPLY"
+    local bare_dir
+    bare_dir="$(_create_bare_repo "$repo_dir")"
+
+    local target="$TEST_HOME/my-target"
+    local result
+    result="$(ensure_repo "file://$bare_dir" "$target")"
+
+    [[ "$result" == "$target" ]]
+    [[ -d "$target" ]]
+    _has_config "$target"
+}
+
+@test "ensure_repo reuses existing dotty repo at target_dir" {
+    create_test_repo "reuse-me"
+    local repo_dir="$REPLY"
+
+    local target="$TEST_HOME/reuse-target"
+    mkdir -p "$target/.dotty"
+    cp "$repo_dir/.dotty/config" "$target/.dotty/config"
+
+    local result
+    result="$(ensure_repo "https://example.com/fake.git" "$target")"
+
+    [[ "$result" == "$target" ]]
+}
+
+@test "ensure_repo errors when target_dir exists but is not a dotty repo" {
+    local target="$TEST_HOME/not-a-dotty-repo"
+    mkdir -p "$target"
+
+    run ensure_repo "https://example.com/fake.git" "$target"
+    [[ "$status" -ne 0 ]]
+    [[ "$output" == *"not a dotty repo"* ]]
+}
+
+@test "ensure_repo falls back to DOTTY_REPOS_DIR without target_dir" {
+    create_test_repo "fallback"
+    local repo_dir="$REPLY"
+    local bare_dir
+    bare_dir="$(_create_bare_repo "$repo_dir")"
+
+    local result
+    result="$(ensure_repo "file://$bare_dir")"
+
+    [[ "$result" == "$DOTTY_REPOS_DIR/fallback" ]]
+    [[ -d "$DOTTY_REPOS_DIR/fallback" ]]
+}
+
 # detect_environment
 
 @test "detect_environment returns detected env" {
