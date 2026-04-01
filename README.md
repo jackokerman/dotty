@@ -243,8 +243,8 @@ Shows registered repos, the resolved chain order, detected environment, git stat
 ```
 dotty status
 
-· Chain: dotfiles → work-dotfiles
-· Env:   laptop
+Chain: dotfiles → work-dotfiles
+Env:   laptop
 
 ✓ dotfiles (/home/you/dotfiles) [clean] [32 linked, 1 unlinked]
 ● work-dotfiles (/home/you/work-dotfiles) [modified] [15 linked]

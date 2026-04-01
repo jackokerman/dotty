@@ -8,6 +8,7 @@ _DOTTY_LIB_LOADED=1
 
 # Logging
 
+# shellcheck disable=SC2034
 COLOR_MAGENTA="\033[35m"
 COLOR_BLUE="\033[34m"
 COLOR_GREEN="\033[32m"
@@ -24,8 +25,8 @@ if [[ -n "${NO_COLOR:-}" ]] || [[ ! -t 1 ]]; then
     COLOR_DIM="" COLOR_BOLD="" COLOR_NONE=""
 fi
 
-title()   { echo -e "${COLOR_MAGENTA}${COLOR_BOLD}● $1${COLOR_NONE}"; }
-info()    { echo -e "· $1"; }
+title()   { echo -e "${COLOR_BLUE}${COLOR_BOLD}● $1${COLOR_NONE}"; }
+info()    { echo -e "$1"; }
 success() { echo -e "${COLOR_GREEN}✔ $1${COLOR_NONE}"; }
 warning() { echo -e "${COLOR_YELLOW}⚠ $1${COLOR_NONE}" >&2; }
 die()     { echo -e "${COLOR_RED}✖ $1${COLOR_NONE}" >&2; exit 1; }

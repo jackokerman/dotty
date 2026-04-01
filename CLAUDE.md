@@ -12,7 +12,7 @@ The entire tool is a single bash script (`dotty`, ~830 lines) plus an installer 
 
 The `dotty` script is structured as a monolithic bash program with procedural sections:
 
-1. **Logging** (dot-prefixed output helpers: `title` `●`, `info` `·`, `success` `✔`, `warning` `⚠`, `die` `✖` with full-line coloring)
+1. **Logging** (output helpers: `title` blue bold `●`, `info` plain text, `success` green `✔`, `warning` yellow `⚠`, `die` red `✖`)
 2. **Registry** (`registry_*` functions manage a flat `name=path` file at `~/.dotty/registry`)
 3. **Config reading** (sources `.dotty/config` from each repo via `_find_config`/`_has_config` helpers)
 4. **Chain resolution** (recursive dependency resolution with cycle detection via `resolve_chain`)
