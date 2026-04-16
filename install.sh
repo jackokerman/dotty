@@ -8,7 +8,7 @@
 set -euo pipefail
 
 DOTTY_DIR="${DOTTY_DIR:-$HOME/.dotty}"
-DOTTY_REPO="https://github.com/jackokerman/dotty.git"
+DOTTY_REPO="${DOTTY_REPO:-https://github.com/jackokerman/dotty.git}"
 
 COLOR_GREEN="\033[32m"
 COLOR_RED="\033[31m"
@@ -35,14 +35,11 @@ elif [[ -d "$DOTTY_DIR" ]]; then
     info "Existing ~/.dotty found, cloning dotty repo alongside..."
     tmp_dir="$(mktemp -d)"
     git clone "$DOTTY_REPO" "$tmp_dir/dotty" || die "Failed to clone dotty"
-    # Move git-tracked files into existing dir, preserving registry/repos/backups
+    # Restore the full tracked tree into the existing state dir while preserving
+    # untracked runtime data like registry, repos, and backups.
     cp -r "$tmp_dir/dotty/.git" "$DOTTY_DIR/.git"
-    cp -f "$tmp_dir/dotty/dotty" "$DOTTY_DIR/dotty" 2>/dev/null || true
-    cp -f "$tmp_dir/dotty/install.sh" "$DOTTY_DIR/install.sh" 2>/dev/null || true
-    cp -rf "$tmp_dir/dotty/completions" "$DOTTY_DIR/completions" 2>/dev/null || true
-    cp -rf "$tmp_dir/dotty/hooks" "$DOTTY_DIR/hooks" 2>/dev/null || true
-    mkdir -p "$DOTTY_DIR/lib"
-    cp -rf "$tmp_dir/dotty/lib"/* "$DOTTY_DIR/lib/" 2>/dev/null || true
+    (cd "$tmp_dir/dotty" && git archive --format=tar HEAD | tar -xf - -C "$DOTTY_DIR") \
+        || die "Failed to restore dotty working tree"
     rm -rf "$tmp_dir"
 else
     git clone "$DOTTY_REPO" "$DOTTY_DIR" || die "Failed to clone dotty"

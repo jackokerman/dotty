@@ -230,6 +230,8 @@ dotty add ~/.tmux.conf --repo dotfiles
 # 3. Prints reminder to commit the new file
 ```
 
+If the destination path already exists inside the selected repo, dotty refuses to overwrite it and exits with an error.
+
 If `--repo` is omitted and multiple repos are registered, dotty prompts you to pick one.
 
 ### `dotty link [name]`
@@ -252,7 +254,7 @@ Env:   laptop
 
 ### `dotty files [repo]`
 
-Lists all files managed by dotty, grouped by repo. Each file shows whether it's currently linked, overridden by a later repo in the chain, or not linked (e.g., excluded via `DOTTY_LINK_IGNORE`).
+Lists all files managed by dotty, grouped by repo. Each file shows whether it's currently linked, overridden by a later repo in the chain, or not currently linked. Paths dotty skips during linking, such as `DOTTY_LINK_IGNORE` matches and gitignored files, are omitted from this view.
 
 ```bash
 dotty files                # list all managed files
@@ -386,8 +388,8 @@ Available functions:
 
 | Function | Description |
 |---|---|
-| `title "msg"` | `●`-prefixed bold magenta heading (full line colored) |
-| `info "msg"` | `·`-prefixed plain message |
+| `title "msg"` | `●`-prefixed bold blue heading |
+| `info "msg"` | Plain message |
 | `success "msg"` | `✔`-prefixed green message (full line colored) |
 | `warning "msg"` | `⚠`-prefixed yellow warning to stderr (full line colored) |
 | `die "msg"` | `✖`-prefixed red error to stderr (full line colored), exits with code 1 |
@@ -439,7 +441,7 @@ The hook reads `DOTTY_GUARD_PATTERNS` at commit time and blocks the commit if an
 
 ### `dotty guard [path]`
 
-Installs the pre-commit hook into the target repo's `.git/hooks/`. If a hook already exists, dotty checks whether it's one it installed (via a marker comment). If it is, it reports "already installed". If it's a foreign hook, it prompts before overwriting.
+Installs the pre-commit hook into the target repo's `.git/hooks/`. If a hook already exists, dotty checks whether it's one it installed (via a marker comment). If it is, dotty refreshes it in place so hook updates are picked up. If it's a foreign hook, it prompts before overwriting.
 
 ### `dotty unguard [path]`
 
@@ -476,13 +478,15 @@ git submodule update --init   # first time only
 Each test gets a fully isolated environment with a temporary `$HOME`, registry, and repo directory, so nothing touches your real dotfiles. The test files are:
 
 - `registry.bats` — registry CRUD
+- `commands.bats` — command-level behavior for `add`, `check`, `files`, and `status`
 - `symlinks.bats` — symlink creation, directory merging, orphan cleanup
 - `chain.bats` — chain resolution, cycle detection, environment detection
 - `dry_run.bats` — dry-run mode
+- `install.bats` — installer behavior for existing `~/.dotty` state
 - `trace.bats` — symlink provenance tracing
 - `files.bats` — file listing and status
 - `uninstall.bats` — repo uninstallation and backup restore
-- `migrate.bats` — `.dotty/` directory layout helpers
+- `migrate.bats` — `.dotty/config` and hook discovery helpers
 - `self_update.bats` — self-update logic and loop guard
 - `shell_init.bats` — shell-init output, change detection, reload marker
 
@@ -503,7 +507,7 @@ Machines without dotty keep working. As you install dotty on each machine, they 
 
 ## Staleness reminders
 
-`dotty check` warns if any registered repo hasn't been fetched in over a day. It reads the registry, deduplicates by path, checks `.git/FETCH_HEAD` mtime for each repo, and exits 1 with a warning if anything is stale. Override the threshold (in seconds) with `DOTTY_CHECK_THRESHOLD`. The check is automatically suppressed when `DOTTY_COMMAND` is set, which prevents duplicate warnings when a hook spawns an interactive shell during `install` or `update`.
+`dotty check` warns if any registered repo hasn't been fetched in over a day. It reads the registry, deduplicates by path, checks `.git/FETCH_HEAD` mtime for each repo, and exits 1 with a warning if anything is stale. Override the threshold (in seconds) with `DOTTY_CHECK_THRESHOLD`. The check is automatically suppressed when `DOTTY_COMMAND` is set, which prevents duplicate warnings when a hook spawns an interactive shell during `install` or `update`. Before the first install, `dotty check` is a no-op.
 
 To get a nudge on each new shell session, add a one-shot `precmd` hook to your `.zshrc`:
 
@@ -521,4 +525,3 @@ add-zsh-hook precmd __dotty_check
 ```
 
 The hook defers to `precmd` so it doesn't block p10k instant prompt, and the one-shot guard ensures it only runs once per session.
-

@@ -84,17 +84,21 @@ _has_config() {
     [[ -f "$repo_dir/.dotty/config" ]]
 }
 
+_reset_config_state() {
+    DOTTY_NAME=""
+    DOTTY_EXTENDS=()
+    DOTTY_ENVIRONMENTS=()
+    DOTTY_ENV_DETECT=""
+    DOTTY_LINK_IGNORE=()
+}
+
 # Sets: DOTTY_NAME, DOTTY_EXTENDS, DOTTY_ENVIRONMENTS, DOTTY_ENV_DETECT
 read_config() {
     local repo_dir="$1"
     local conf
     conf="$(_find_config "$repo_dir")" || die "No .dotty/config found in $repo_dir"
 
-    DOTTY_NAME=""
-    DOTTY_EXTENDS=()
-    DOTTY_ENVIRONMENTS=()
-    DOTTY_ENV_DETECT=""
-    DOTTY_LINK_IGNORE=()
+    _reset_config_state
 
     # shellcheck disable=SC1090
     source "$conf"
@@ -601,6 +605,7 @@ cmd_add() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --repo)
+                [[ $# -ge 2 ]] || die "Usage: dotty add <file> [--repo <name>]"
                 repo_name="$2"
                 shift 2
                 ;;
@@ -656,6 +661,7 @@ cmd_add() {
     local rel_path="${abs_file#"$HOME"/}"
     [[ "$rel_path" != "$abs_file" ]] || die "File must be under \$HOME: $abs_file"
     local dest="$repo_path/home/$rel_path"
+    [[ ! -e "$dest" && ! -L "$dest" ]] || die "Target already exists in repo: $dest"
 
     mkdir -p "$(dirname "$dest")"
     mv "$abs_file" "$dest"
@@ -747,13 +753,15 @@ cmd_status() {
         # Count symlink health
         local linked=0 overridden=0 not_linked=0
         _FILE_LINES=()
+        if _has_config "$rpath"; then
+            read_config "$rpath"
+        else
+            _reset_config_state
+        fi
         _files_walk "$rpath/home" "" "$name"
         if [[ -n "$env" && -d "$rpath/$env/home" ]]; then
-            if _has_config "$rpath"; then
-                read_config "$rpath"
-                if [[ ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]] && _is_declared_env "$env"; then
-                    _files_walk "$rpath/$env/home" "" "$name"
-                fi
+            if [[ ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]] && _is_declared_env "$env"; then
+                _files_walk "$rpath/$env/home" "" "$name"
             fi
         fi
         for fl in ${_FILE_LINES[@]+"${_FILE_LINES[@]}"}; do
@@ -972,6 +980,9 @@ _files_walk() {
         should_exclude "$name" && continue
 
         local rel="${prefix:+$prefix/}$name"
+        _is_link_ignored "$rel" && continue
+        _is_gitignored "$item" && continue
+
         local home_path="$HOME/$rel"
 
         if [[ -d "$item" && ! -L "$item" ]]; then
@@ -1018,15 +1029,17 @@ cmd_files() {
         local name="${all_names[$i]}"
         local rpath="${all_paths[$i]}"
 
+        if _has_config "$rpath"; then
+            read_config "$rpath"
+        else
+            _reset_config_state
+        fi
         _files_walk "$rpath/home" "" "$name"
 
         # Environment overlay
         if [[ -n "$env" && -d "$rpath/$env/home" ]]; then
-            if _has_config "$rpath"; then
-                read_config "$rpath"
-                if [[ ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]] && _is_declared_env "$env"; then
-                    _files_walk "$rpath/$env/home" "" "$name"
-                fi
+            if [[ ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]] && _is_declared_env "$env"; then
+                _files_walk "$rpath/$env/home" "" "$name"
             fi
         fi
     done
@@ -1258,6 +1271,7 @@ cmd_check() {
     # Skip if running inside a dotty hook (e.g., a hook spawned an interactive
     # shell that sources .zshrc and calls dotty check).
     [[ -n "${DOTTY_COMMAND:-}" ]] && return 0
+    registry_init
 
     local threshold="${DOTTY_CHECK_THRESHOLD:-86400}"
     local now
