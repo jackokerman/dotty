@@ -1,7 +1,5 @@
 # AGENTS.md
 
-This is the canonical repo-specific instruction file. `CLAUDE.md` is a compatibility symlink to this file.
-
 ## Scope
 
 - Dotty is open source. Never hardcode specific user directories, personal repo names, or machine-specific paths in code, tests, or docs.
