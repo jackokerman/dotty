@@ -1,0 +1,134 @@
+name: Bug report
+description: "Report incorrect or surprising behavior in `dotty`."
+title: "[bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please include enough detail that we can reason about the problem outside your own machine. Redact secrets and private repo URLs as needed, but keep the chain shape and the exact command flow intact.
+
+  - type: input
+    id: dotty_version
+    attributes:
+      label: "`dotty` version"
+      description: "Run `dotty version` and paste the result."
+      placeholder: dotty 0.3.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: shell
+    attributes:
+      label: Shell
+      options:
+        - bash
+        - zsh
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: install_method
+    attributes:
+      label: Install path
+      description: "How did you install or invoke `dotty`?"
+      placeholder: |
+        Examples:
+        - `curl -fsSL ... | bash`
+        - local checkout
+        - wrapper script in another dotfiles repo
+    validations:
+      required: true
+
+  - type: textarea
+    id: chain_layout
+    attributes:
+      label: Repo chain summary
+      description: Describe the repos involved, their override order, and any environment overlays that matter.
+      placeholder: |
+        Example:
+        - `work-dotfiles` extends `personal-dotfiles`
+        - conflict is on `home/.gitconfig`
+        - `DOTTY_ENV` resolves to `remote`
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command
+      description: Paste the command or sequence of commands that triggered the problem.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant diagnostics
+      description: Include the parts that explain the failure. If one command is not applicable, say why.
+      placeholder: |
+        Helpful commands:
+        - `dotty doctor`
+        - `dotty status`
+        - `dotty trace <path>`
+        - `dotty files`
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: config_snippets
+    attributes:
+      label: Relevant config or hook snippets
+      description: Paste the smallest useful fragments from `.dotty/config`, `.dotty/run.sh`, or related files.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: repro_steps
+    attributes:
+      label: Minimal repro steps
+      description: "If you can reproduce from a fresh temp directory or by adapting `examples/`, spell that out here."
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: "I checked `README.md`, `CONTRIBUTING.md`, and existing issues first."
+          required: true
+        - label: "I either included `dotty doctor` output or explained why I could not run it."
+          required: true

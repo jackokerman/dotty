@@ -1,0 +1,59 @@
+name: Feature request
+description: "Propose a change to `dotty` itself."
+title: "[feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dotty is intentionally narrow. Requests are strongest when they explain the concrete problem, the current workaround, and why the change belongs in `dotty` rather than in repo conventions, hooks, or local scripts.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What are you trying to do, and where does the current workflow break down?
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_workaround
+    attributes:
+      label: Current workaround
+      description: If you already solve this in your own dotfiles or hooks, describe that approach.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the command, config, or behavior you want.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why_dotty
+    attributes:
+      label: "Why this belongs in `dotty`"
+      description: Explain why this should be a built-in feature instead of documentation, a hook pattern, or a repo-local convention.
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Concrete example
+      description: Show a sample repo layout, config snippet, or command flow if that clarifies the request.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: "I checked `ROADMAP.md`, including the `Not now` section."
+          required: true
+        - label: "I read `README.md` and `CONTRIBUTING.md` first."
+          required: true

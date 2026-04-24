@@ -1,0 +1,2 @@
+export WORK_ENV="company"
+alias gs="git status"

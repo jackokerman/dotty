@@ -12,6 +12,8 @@
 - `lib/utils.sh` contains shared shell helpers used by hooks and related tooling.
 - `hooks/pre-commit` is the standalone guard hook installed by `dotty guard`; it reads newline-separated `DOTTY_GUARD_PATTERNS` at commit time.
 - `completions/_dotty` contains zsh completions.
+- `.github/ISSUE_TEMPLATE/` contains the GitHub issue forms for bug reports and feature requests.
+- `examples/` contains contributor-facing sample dotfiles layouts referenced from the docs and issue forms.
 - `.dotty/commands/` in managed repos is the source of repo-defined `dotty run` commands.
 - `test/*.bats` is the repo's behavior test suite.
 
@@ -49,5 +51,7 @@ When dotty behavior changes, update the same change set:
 - `cmd_help()` in `dotty`
 - `completions/_dotty`
 - `README.md`
+- `.github/ISSUE_TEMPLATE/`
+- `examples/`
 - Downstream repo docs that describe dotty behavior, including `AGENTS.md` files and compatibility `CLAUDE.md` symlinks in managed repos
 - Downstream hooks, shell config, install scripts, and other files that reference dotty env vars or `$DOTTY_LIB`

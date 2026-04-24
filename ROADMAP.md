@@ -2,7 +2,7 @@
 
 Dotty is aiming for a polished v1 for power users who want layered personal, work, and machine-specific dotfiles without moving to a template-heavy tool. The backlog below is ordered on purpose.
 
-The default next task is the top unchecked item under `Now`, then `Next`, then `Later`. If a behavior change lands, keep `README.md`, `cmd_help()`, `completions/_dotty`, and the relevant tests in sync in the same change set.
+The default next task is the top unchecked item under `Now`, then `Next`, then `Later`. Release-only milestones still count in that order, but when the ask is to implement something, skip the pure tagging/release steps and take the first unchecked product work item instead. If a behavior change lands, keep `README.md`, `cmd_help()`, `completions/_dotty`, and the relevant tests in sync in the same change set.
 
 ## Now
 
@@ -19,7 +19,7 @@ The default next task is the top unchecked item under `Now`, then `Next`, then `
 
 - [x] Revisit installer ergonomics for bash and zsh. Why: the installer needed to stop assuming bash for PATH setup and stop leaving zsh users to finish the last step themselves. Done when: first-run shell setup is explicit and unsurprising for both shells.
 - [ ] Cut the first tagged release for the public-ready baseline. Why: sharing a moving `main` branch is weaker than sharing a named release. Done when: `DOTTY_VERSION` is bumped, a tag is pushed, and release notes summarize the public baseline.
-- [ ] Tighten contributor ergonomics around examples and issue intake. Why: once the tool is shared, lightweight issue templates and a small example repo or fixture may pay off. Done when: public contributors have an obvious path to report bugs or propose changes without guessing project norms.
+- [x] Tighten contributor ergonomics around examples and issue intake. Why: once the tool is shared, lightweight issue templates and a small example repo or fixture reduce guesswork. Done when: the repo ships GitHub issue forms for bug reports and feature requests, a layered example under `examples/`, and contributor docs that point at both.
 
 ## Later
 
