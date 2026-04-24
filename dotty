@@ -102,18 +102,33 @@ _reset_config_state() {
     DOTTY_LINK_IGNORE=()
 }
 
+_CONFIG_LOAD_ERROR=""
+
+_load_config_file() {
+    local conf="$1"
+
+    _CONFIG_LOAD_ERROR=""
+    _reset_config_state
+
+    # shellcheck disable=SC1090
+    if ! source "$conf"; then
+        _CONFIG_LOAD_ERROR="Failed to load $conf"
+        return 1
+    fi
+
+    if [[ -z "$DOTTY_NAME" ]]; then
+        _CONFIG_LOAD_ERROR="DOTTY_NAME is required in $conf"
+        return 1
+    fi
+}
+
 # Sets: DOTTY_NAME, DOTTY_EXTENDS, DOTTY_ENVIRONMENTS, DOTTY_ENV_DETECT
 read_config() {
     local repo_dir="$1"
     local conf
     conf="$(_find_config "$repo_dir")" || die "No .dotty/config found in $repo_dir"
 
-    _reset_config_state
-
-    # shellcheck disable=SC1090
-    source "$conf"
-
-    [[ -n "$DOTTY_NAME" ]] || die "DOTTY_NAME is required in $conf"
+    _load_config_file "$conf" || die "${_CONFIG_LOAD_ERROR:-Invalid config: $conf}"
 }
 
 _is_declared_env() {
@@ -449,6 +464,219 @@ run_chain() {
     if [[ $_LINK_FAIL_COUNT -gt 0 ]]; then
         _CHAIN_HAD_ERRORS=true
         warning "$_LINK_FAIL_COUNT symlink(s) failed to create"
+    fi
+}
+
+doctor_success() {
+    success "$1"
+}
+
+doctor_warn() {
+    _DOCTOR_WARN_COUNT=$((_DOCTOR_WARN_COUNT + 1))
+    warning "$1"
+}
+
+doctor_fail() {
+    _DOCTOR_FAIL_COUNT=$((_DOCTOR_FAIL_COUNT + 1))
+    echo -e "${COLOR_RED}✖ $1${COLOR_NONE}" >&2
+}
+
+_DOCTOR_ERROR=""
+_DOCTOR_CHAIN_NAMES=()
+_DOCTOR_CHAIN_PATHS=()
+_DOCTOR_RESOLVING=()
+
+_doctor_read_config() {
+    local repo_dir="$1"
+    local conf
+    conf="$(_find_config "$repo_dir")" || {
+        _DOCTOR_ERROR="No .dotty/config found in $repo_dir"
+        return 1
+    }
+
+    if ! _load_config_file "$conf"; then
+        _DOCTOR_ERROR="${_CONFIG_LOAD_ERROR:-Invalid config: $conf}"
+        return 1
+    fi
+}
+
+_doctor_lookup_source() {
+    local source="$1"
+
+    if [[ -d "$source" ]]; then
+        (cd "$source" && pwd)
+        return 0
+    fi
+
+    local source_name
+    source_name="$(basename "$source" .git)"
+
+    local registered_path
+    registered_path="$(registry_get "$source_name")" || true
+    if [[ -n "$registered_path" && -d "$registered_path" ]]; then
+        (cd "$registered_path" && pwd)
+        return 0
+    fi
+
+    local clone_dir="$DOTTY_REPOS_DIR/$source_name"
+    if [[ -d "$clone_dir" ]]; then
+        (cd "$clone_dir" && pwd)
+        return 0
+    fi
+
+    return 1
+}
+
+_doctor_resolve_chain_no_clone() {
+    local repo_dir
+    repo_dir="$(cd "$1" && pwd)"
+
+    if ! _doctor_read_config "$repo_dir"; then
+        return 1
+    fi
+
+    local name="$DOTTY_NAME"
+    local existing
+    for existing in ${_DOCTOR_CHAIN_NAMES[@]+"${_DOCTOR_CHAIN_NAMES[@]}"}; do
+        [[ "$existing" == "$name" ]] && return 0
+    done
+
+    local pending
+    for pending in ${_DOCTOR_RESOLVING[@]+"${_DOCTOR_RESOLVING[@]}"}; do
+        if [[ "$pending" == "$name" ]]; then
+            _DOCTOR_ERROR="Dependency cycle detected at $name"
+            return 1
+        fi
+    done
+    _DOCTOR_RESOLVING+=("$name")
+
+    local -a extends=(${DOTTY_EXTENDS[@]+"${DOTTY_EXTENDS[@]}"})
+    local parent_source
+    for parent_source in "${extends[@]}"; do
+        local parent_dir
+        parent_dir="$(_doctor_lookup_source "$parent_source")" || {
+            _DOCTOR_ERROR="$name depends on $parent_source, but it is not installed or registered"
+            return 1
+        }
+        _doctor_resolve_chain_no_clone "$parent_dir" || return 1
+    done
+
+    unset '_DOCTOR_RESOLVING[${#_DOCTOR_RESOLVING[@]}-1]'
+
+    _DOCTOR_CHAIN_NAMES+=("$name")
+    _DOCTOR_CHAIN_PATHS+=("$repo_dir")
+}
+
+_doctor_resolve_from_leaf_no_clone() {
+    local best_len=0
+    local found_valid=false
+    local -a best_names=() best_paths=()
+
+    while IFS='=' read -r _name rpath; do
+        [[ -n "$rpath" && -d "$rpath" ]] || continue
+
+        _DOCTOR_CHAIN_NAMES=()
+        _DOCTOR_CHAIN_PATHS=()
+        _DOCTOR_RESOLVING=()
+        _DOCTOR_ERROR=""
+
+        if ! _doctor_resolve_chain_no_clone "$rpath"; then
+            continue
+        fi
+
+        found_valid=true
+        if [[ ${#_DOCTOR_CHAIN_NAMES[@]} -gt $best_len ]]; then
+            best_len=${#_DOCTOR_CHAIN_NAMES[@]}
+            best_names=(${_DOCTOR_CHAIN_NAMES[@]+"${_DOCTOR_CHAIN_NAMES[@]}"})
+            best_paths=(${_DOCTOR_CHAIN_PATHS[@]+"${_DOCTOR_CHAIN_PATHS[@]}"})
+        fi
+    done < "$DOTTY_REGISTRY"
+
+    _DOCTOR_CHAIN_NAMES=(${best_names[@]+"${best_names[@]}"})
+    _DOCTOR_CHAIN_PATHS=(${best_paths[@]+"${best_paths[@]}"})
+
+    [[ "$found_valid" == "true" ]]
+}
+
+_doctor_check_hook() {
+    local repo_name="$1"
+    local repo_dir="$2"
+    local hook_path="$repo_dir/.dotty/run.sh"
+
+    if [[ -L "$hook_path" && ! -e "$hook_path" ]]; then
+        doctor_fail "$repo_name: .dotty/run.sh is a broken symlink"
+        return 0
+    fi
+
+    if [[ ! -e "$hook_path" ]]; then
+        doctor_success "$repo_name: no hook script"
+        return 0
+    fi
+
+    if [[ ! -f "$hook_path" ]]; then
+        doctor_fail "$repo_name: .dotty/run.sh exists but is not a file"
+        return 0
+    fi
+
+    if [[ ! -x "$hook_path" ]]; then
+        doctor_fail "$repo_name: .dotty/run.sh exists but is not executable"
+        return 0
+    fi
+
+    doctor_success "$repo_name: hook is executable"
+}
+
+_doctor_check_commands() {
+    local repo_name="$1"
+    local repo_dir="$2"
+    local commands_dir="$repo_dir/.dotty/commands"
+    local found_commands=false
+
+    if [[ -L "$commands_dir" && ! -e "$commands_dir" ]]; then
+        doctor_fail "$repo_name: .dotty/commands is a broken symlink"
+        return 0
+    fi
+
+    if [[ ! -e "$commands_dir" ]]; then
+        doctor_success "$repo_name: no repo commands"
+        return 0
+    fi
+
+    if [[ ! -d "$commands_dir" ]]; then
+        doctor_fail "$repo_name: .dotty/commands exists but is not a directory"
+        return 0
+    fi
+
+    local item
+    for item in "$commands_dir"/* "$commands_dir"/.*; do
+        [[ -e "$item" || -L "$item" ]] || continue
+
+        local command_name
+        command_name="$(basename "$item")"
+        [[ "$command_name" == "." || "$command_name" == ".." || "$command_name" == .* ]] && continue
+
+        found_commands=true
+
+        if [[ -L "$item" && ! -e "$item" ]]; then
+            doctor_fail "$repo_name: command '$command_name' is a broken symlink"
+            continue
+        fi
+
+        if [[ ! -f "$item" ]]; then
+            doctor_fail "$repo_name: command '$command_name' is not a file"
+            continue
+        fi
+
+        if [[ ! -x "$item" ]]; then
+            doctor_fail "$repo_name: command '$command_name' exists but is not executable"
+            continue
+        fi
+
+        doctor_success "$repo_name: command '$command_name' is executable"
+    done
+
+    if [[ "$found_commands" == "false" ]]; then
+        doctor_success "$repo_name: no repo commands"
     fi
 }
 
@@ -1300,6 +1528,117 @@ cmd_trace() {
     fi
 }
 
+cmd_doctor() {
+    [[ $# -eq 0 ]] || die "Usage: dotty doctor"
+
+    registry_init
+    title "dotty doctor"
+
+    _DOCTOR_FAIL_COUNT=0
+    _DOCTOR_WARN_COUNT=0
+
+    local repo_count=0
+    local -a valid_repo_paths=()
+
+    while IFS='=' read -r registered_name repo_path; do
+        [[ -n "$registered_name" ]] || continue
+        repo_count=$((repo_count + 1))
+
+        if [[ ! -d "$repo_path" ]]; then
+            doctor_fail "$registered_name: registered path is missing ($repo_path)"
+            continue
+        fi
+        doctor_success "$registered_name: registered path exists"
+
+        if ! _doctor_read_config "$repo_path"; then
+            doctor_fail "$registered_name: ${_DOCTOR_ERROR}"
+            continue
+        fi
+
+        local resolved_name="$DOTTY_NAME"
+        if [[ "$resolved_name" != "$registered_name" ]]; then
+            doctor_fail "$registered_name: registry name does not match DOTTY_NAME ($resolved_name)"
+        else
+            doctor_success "$registered_name: config loads cleanly"
+        fi
+
+        if [[ ! -d "$repo_path/.git" ]]; then
+            doctor_warn "$registered_name: not a git repo, update and check will skip git operations"
+        fi
+
+        _doctor_check_hook "$registered_name" "$repo_path"
+        _doctor_check_commands "$registered_name" "$repo_path"
+        valid_repo_paths+=("$repo_path")
+    done < "$DOTTY_REGISTRY"
+
+    if [[ $repo_count -eq 0 ]]; then
+        doctor_fail "No repos registered. Run 'dotty install' first."
+    fi
+
+    local repo_dir
+    for repo_dir in "${valid_repo_paths[@]}"; do
+        if ! _doctor_read_config "$repo_dir"; then
+            continue
+        fi
+
+        local leaf_name="$DOTTY_NAME"
+        _DOCTOR_CHAIN_NAMES=()
+        _DOCTOR_CHAIN_PATHS=()
+        _DOCTOR_RESOLVING=()
+        _DOCTOR_ERROR=""
+
+        if ! _doctor_resolve_chain_no_clone "$repo_dir"; then
+            doctor_fail "$leaf_name: ${_DOCTOR_ERROR}"
+            continue
+        fi
+
+        local chain_str=""
+        local chain_name
+        for chain_name in ${_DOCTOR_CHAIN_NAMES[@]+"${_DOCTOR_CHAIN_NAMES[@]}"}; do
+            [[ -n "$chain_str" ]] && chain_str+=" → "
+            chain_str+="$chain_name"
+        done
+        doctor_success "$leaf_name: chain resolves (${chain_str})"
+    done
+
+    if _doctor_resolve_from_leaf_no_clone; then
+        CHAIN_NAMES=(${_DOCTOR_CHAIN_NAMES[@]+"${_DOCTOR_CHAIN_NAMES[@]}"})
+        CHAIN_PATHS=(${_DOCTOR_CHAIN_PATHS[@]+"${_DOCTOR_CHAIN_PATHS[@]}"})
+
+        local env=""
+        env="$(detect_environment 2>/dev/null)" || true
+
+        if [[ -n "$env" ]]; then
+            doctor_success "Detected environment: $env"
+
+            local i
+            for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+                read_config "${CHAIN_PATHS[$i]}"
+                if [[ ${#DOTTY_ENVIRONMENTS[@]} -gt 0 ]] && ! _is_declared_env "$env"; then
+                    doctor_fail "${CHAIN_NAMES[$i]}: detected environment '$env' is not listed in DOTTY_ENVIRONMENTS"
+                    continue
+                fi
+
+                if [[ -d "${CHAIN_PATHS[$i]}/$env/home" ]]; then
+                    doctor_success "${CHAIN_NAMES[$i]}: $env overlay is declared"
+                fi
+            done
+        else
+            doctor_success "No environment detected"
+        fi
+    elif [[ $repo_count -gt 0 ]]; then
+        doctor_fail "Could not resolve an active chain from the registered repos"
+    fi
+
+    echo ""
+    if [[ $_DOCTOR_FAIL_COUNT -gt 0 ]]; then
+        echo -e "${COLOR_RED}✖ dotty doctor found ${_DOCTOR_FAIL_COUNT} failure(s), ${_DOCTOR_WARN_COUNT} warning(s)${COLOR_NONE}" >&2
+        return 1
+    fi
+
+    echo -e "${COLOR_GREEN}✔ dotty doctor found 0 failures, ${_DOCTOR_WARN_COUNT} warning(s)${COLOR_NONE}"
+}
+
 cmd_self_update() {
     if [[ ! -d "$DOTTY_DIR/.git" ]]; then
         die "Dotty is not a git repo at $DOTTY_DIR, cannot self-update."
@@ -1383,6 +1722,7 @@ Commands:
   unregister <name>        Remove a repo from the registry
   files [repo]             List all managed files, grouped by repo
   trace <path>             Show which repo a file or directory comes from
+  doctor                   Check registry, chain, hooks, and repo commands
   check                    Warn if repos haven't been fetched recently
   shell-init               Output shell wrapper for auto-reload after changes
   guard [path]             Install pre-commit hook to block sensitive content
@@ -1509,6 +1849,7 @@ main() {
         unregister)   cmd_unregister "$@" ;;
         files)        cmd_files "$@" ;;
         trace)        cmd_trace "$@" ;;
+        doctor)       cmd_doctor "$@" ;;
         check)        cmd_check "$@" ;;
         shell-init)   cmd_shell_init "$@" ;;
         guard)        cmd_guard "$@" ;;

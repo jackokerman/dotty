@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    name: bats (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run bats suite
+        shell: bash
+        run: ./test/bats/bin/bats test/
+
+      - name: Smoke test install and core commands
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          temp_home="$(mktemp -d)"
+          base_repo="$temp_home/base-dotfiles"
+          work_repo="$temp_home/work-dotfiles"
+
+          mkdir -p "$base_repo/.dotty" "$base_repo/home/.config/git"
+          cat > "$base_repo/.dotty/config" <<'EOF'
+          DOTTY_NAME="base-dotfiles"
+          DOTTY_EXTENDS=()
+          DOTTY_ENVIRONMENTS=()
+          DOTTY_ENV_DETECT=""
+          DOTTY_LINK_IGNORE=()
+          EOF
+          cat > "$base_repo/home/.gitconfig" <<'EOF'
+          [user]
+              name = Base User
+          EOF
+          cat > "$base_repo/home/.config/git/config" <<'EOF'
+          [pull]
+              rebase = true
+          EOF
+
+          mkdir -p "$work_repo/.dotty" "$work_repo/home/.config/git"
+          cat > "$work_repo/.dotty/config" <<EOF
+          DOTTY_NAME="work-dotfiles"
+          DOTTY_EXTENDS=("$base_repo")
+          DOTTY_ENVIRONMENTS=()
+          DOTTY_ENV_DETECT=""
+          DOTTY_LINK_IGNORE=()
+          EOF
+          cat > "$work_repo/home/.gitconfig.local" <<'EOF'
+          [user]
+              email = work@example.com
+          EOF
+          cat > "$work_repo/home/.config/git/ignore" <<'EOF'
+          .idea
+          EOF
+
+          HOME="$temp_home" DOTTY_DIR="$temp_home/.dotty" DOTTY_REPO="$GITHUB_WORKSPACE" bash "$GITHUB_WORKSPACE/install.sh"
+
+          export HOME="$temp_home"
+          export DOTTY_DIR="$temp_home/.dotty"
+          export PATH="$DOTTY_DIR/bin:$PATH"
+          export SHELL="/bin/bash"
+
+          dotty install "$work_repo"
+          dotty link
+          dotty status
+          dotty doctor
+          dotty trace "$HOME/.gitconfig" | grep 'base-dotfiles'
+          dotty trace "$HOME/.config/git" | grep 'work-dotfiles'
+          dotty check
+          dotty shell-init | grep 'exec "\$SHELL"'

@@ -34,6 +34,7 @@ _dotty() {
         'unregister:Remove a repo from the registry'
         'files:List all managed files, grouped by repo'
         'trace:Show which repo a file or directory comes from'
+        'doctor:Check registry, chain, hooks, and repo commands'
         'check:Warn if repos haven'\''t been fetched recently'
         'shell-init:Output shell wrapper for auto-reload after changes'
         'guard:Install pre-commit hook to block sensitive content'
@@ -88,7 +89,7 @@ _dotty() {
         guard|unguard)
             _files -/
             ;;
-        commands|self-update|shell-init)
+        commands|self-update|shell-init|doctor|check)
             ;;
     esac
 }

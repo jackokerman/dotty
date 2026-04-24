@@ -1,8 +1,77 @@
 # ·· dotty ··
 
-A dotfiles manager written in bash · No dependencies beyond `bash` and `git`.
+A dotfiles manager written in bash, with no dependencies beyond `bash` and `git`.
 
-Dotty manages chains of dotfiles repositories where later repos override earlier ones. You keep personal dotfiles in one repo and work-specific overrides in another, and dotty layers them together with later repos winning on conflicts. It also supports environment-specific overlays within a single repo, so the same dotfiles can behave differently on your laptop vs. a remote dev server.
+Dotty is for people who want layered dotfiles without hiding everything behind a template system. You keep a base repo for personal config, add one or more overlay repos for work or team-specific changes, and let later repos win on conflicts. Inside each repo, you can still add environment-specific overlays when the same setup needs to behave differently on a laptop and a remote box.
+
+## Why dotty
+
+Dotty is a good fit when your setup looks like this:
+
+- You want personal dotfiles in one repo and work-specific overrides in another.
+- You want later repos to replace earlier files cleanly, without flattening everything into one tree.
+- You still want plain files, symlinks, and bash hooks instead of a template DSL.
+- You want debugging tools that tell you which repo is actually providing a file.
+
+The core model is opinionated and small:
+
+- Repo chains via `DOTTY_EXTENDS`, with later repos overriding earlier repos.
+- Directory merging, so shared directories like `~/.config/git/` can contain files from multiple repos.
+- Optional environment overlays via `$env/home/`.
+- Debugging commands like `dotty status`, `dotty files`, `dotty trace`, and `dotty doctor`.
+
+## Personal + Work Example
+
+Here is the most common shape that dotty is built for:
+
+```bash
+# personal dotfiles (.dotty/config)
+DOTTY_NAME="dotfiles"
+DOTTY_EXTENDS=()
+
+# work dotfiles (.dotty/config)
+DOTTY_NAME="work-dotfiles"
+DOTTY_EXTENDS=("https://github.com/you/dotfiles.git")
+```
+
+Your base repo might own the shared defaults:
+
+```text
+dotfiles/
+├── .dotty/config
+└── home/
+    ├── .gitconfig
+    └── .config/git/config
+```
+
+Your overlay repo only needs the work-specific pieces:
+
+```text
+work-dotfiles/
+├── .dotty/config
+└── home/
+    ├── .gitconfig.local
+    └── .config/git/ignore
+```
+
+After `dotty install ~/work-dotfiles`, dotty resolves the chain, links the base repo first, then overlays the work repo. The result under `$HOME` looks like this:
+
+```text
+~/
+├── .gitconfig -> ~/dotfiles/home/.gitconfig
+├── .gitconfig.local -> ~/work-dotfiles/home/.gitconfig.local
+└── .config/git/
+    ├── config -> ~/dotfiles/home/.config/git/config
+    └── ignore -> ~/work-dotfiles/home/.config/git/ignore
+```
+
+That is the main value prop. You keep clean ownership boundaries between repos, but the resulting home directory still composes the way you expect.
+
+## How dotty compares
+
+`chezmoi` and `yadm` are stronger if you want templating, secrets handling, or a more feature-rich ecosystem around a single source repo. `Stow` and `Dotbot` are great if one repo plus symlinks is enough.
+
+Dotty is narrower and more opinionated. It is strongest when the hard part of your setup is composing multiple repos with explicit override order, not generating files from templates. If your main problem is "how do I keep personal, work, and machine-specific config layered cleanly," dotty is a better fit than a single-repo tool. If your main problem is secrets, templating, or a broad ecosystem of integrations, another tool may be a better fit.
 
 ## Getting started
 
@@ -299,6 +368,14 @@ dotty trace ~/.config/git
 # ~/.config/git/ignore  →  work-dotfiles (home/.config/git/ignore)
 ```
 
+### `dotty doctor`
+
+Runs read-only diagnostics against your installed state. It checks registered paths, config discovery, non-mutating chain resolution, environment declarations, executable hooks, and repo-defined commands. It exits non-zero on failures and zero on success or warnings-only.
+
+```bash
+dotty doctor
+```
+
 ### `dotty shell-init`
 
 Outputs a shell wrapper function that automatically reloads your shell after `dotty install` or `dotty update` makes changes. Add this to your `.zshrc` or `.bashrc`:
@@ -536,10 +613,13 @@ git submodule update --init   # first time only
 ./test/bats/bin/bats test/symlinks.bats  # run a single file
 ```
 
+GitHub Actions runs the same suite, plus a clean-home install smoke test, on macOS and Linux.
+
 Each test gets a fully isolated environment with a temporary `$HOME`, registry, and repo directory, so nothing touches your real dotfiles. The test files are:
 
 - `registry.bats` — registry CRUD
 - `commands.bats` — command-level behavior for `add`, `check`, `commands`, `files`, `run`, and `status`
+- `doctor.bats` — `dotty doctor` diagnostics and failure cases
 - `symlinks.bats` — symlink creation, directory merging, orphan cleanup
 - `chain.bats` — chain resolution, cycle detection, environment detection
 - `dry_run.bats` — dry-run mode
@@ -565,6 +645,8 @@ fi
 ```
 
 Machines without dotty keep working. As you install dotty on each machine, they start using the new path.
+
+For contributor and release workflow details, see `CONTRIBUTING.md` and `RELEASING.md`.
 
 ## Staleness reminders
 
