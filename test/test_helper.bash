@@ -117,6 +117,22 @@ add_env_file() {
     echo "$content" > "$repo_dir/$env_name/home/$rel_path"
 }
 
+# Add an executable repo-defined command under .dotty/commands/.
+# Usage: add_repo_command "repo_path" "command-name" ["script body"]
+add_repo_command() {
+    local repo_dir="$1"
+    local name="$2"
+    local body="${3:-#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' \"$name\"
+}"
+    local command_path="$repo_dir/.dotty/commands/$name"
+
+    mkdir -p "$(dirname "$command_path")"
+    printf '%s\n' "$body" > "$command_path"
+    chmod +x "$command_path"
+}
+
 # Register a test repo in the fake registry.
 register_test_repo() {
     local name="$1"

@@ -71,6 +71,8 @@ Your repo mirrors the structure of `$HOME`. Everything in `home/` gets symlinked
 my-dotfiles/
 ├── .dotty/
 │   ├── config              # config (required)
+│   ├── commands/           # repo-defined dotty commands (optional)
+│   │   └── my-command      # executable, runnable via `dotty run my-command`
 │   └── run.sh              # hook script (optional, must be executable)
 ├── home/                   # symlinked to $HOME
 │   ├── .zshrc              # → ~/.zshrc
@@ -209,6 +211,27 @@ dotty update              # update dotty, pull and re-link everything
 dotty update dotfiles     # update dotty, pull just one repo, re-link the full chain
 ```
 
+### `dotty commands`
+
+Lists repo-defined commands discovered from `.dotty/commands/` across the active chain after overlay resolution. Later repos override earlier repos when they define the same command name.
+
+```bash
+dotty commands
+# brew-sync   dotfiles
+```
+
+### `dotty run <name> [args]`
+
+Runs a repo-defined command from `.dotty/commands/`. Dotty resolves the active chain first, picks the winning command using the same later-repo-wins overlay semantics as file linking, then executes the command from the defining repo's root directory.
+
+```bash
+dotty run brew-sync
+dotty run my-command --flag value
+dotty run my-command -- --verbose
+```
+
+This is an explicit command surface. Built-in dotty commands keep their existing names and behavior; dotty does not fall through unknown commands automatically.
+
 ### `dotty self-update`
 
 Updates dotty itself without touching the chain. Useful when you just want the latest version of the tool without re-running the full install or update cycle.
@@ -310,7 +333,7 @@ Remove a repo from the registry. This doesn't delete the repo or its symlinks.
 
 ### Options
 
-All options can be placed before or after the command name.
+Global dotty options can be placed before or after the command name.
 
 `-v`, `--verbose` — Show per-file messages instead of just summary counts. Useful for debugging which files are being linked, skipped, or cleaned up.
 
@@ -319,6 +342,13 @@ All options can be placed before or after the command name.
 ```bash
 dotty --dry-run link      # see what link would do
 dotty -n install           # preview a full install cycle
+```
+
+If a repo-defined command needs to receive dotty's own global flags literally, insert `--` before the repo-command args:
+
+```bash
+dotty run brew-sync -- --verbose
+dotty run my-command -- -n
 ```
 
 ## Hooks
@@ -368,6 +398,37 @@ if [[ ! -f "$marker" ]]; then
 fi
 ```
 
+## Repo-Defined Commands
+
+If a repo has executable files under `.dotty/commands/`, dotty exposes them through `dotty run <name>`.
+
+- command names come from the filename in `.dotty/commands/`
+- later repos in the chain override earlier repos on name conflicts
+- commands run with the defining repo as the working directory
+- commands do not run during `install`, `update`, or `link`; they are only executed explicitly via `dotty run`
+- use `dotty run <name> -- ...` when the repo command itself needs `-v`/`--verbose` or `-n`/`--dry-run`
+
+These environment variables are available while a repo-defined command runs:
+
+- `DOTTY_COMMAND` — always `run`
+- `DOTTY_RUN_NAME` — resolved command name
+- `DOTTY_RUN_REPO` — absolute path to the repo providing the command
+- `DOTTY_ENV` — detected environment (empty if none)
+- `DOTTY_VERBOSE` — `"true"` when `-v`/`--verbose` is set
+- `DOTTY_LIB` — path to the shared utility library
+
+Example:
+
+```bash
+#!/usr/bin/env bash
+# .dotty/commands/brew-sync
+source "$DOTTY_LIB"
+
+title "Syncing Homebrew"
+brew bundle --file "$DOTTY_RUN_REPO/Brewfile"
+brew bundle cleanup --file "$DOTTY_RUN_REPO/Brewfile" --force --formula --cask
+```
+
 ### Hook utilities
 
 Dotty ships a utility library at `lib/utils.sh` that hook scripts can source via the `DOTTY_LIB` environment variable. This gives hooks access to the same logging and symlink functions that dotty uses internally, so you don't have to maintain your own copies.
@@ -411,7 +472,7 @@ If you need to add the directory manually:
 fpath=("$HOME/.local/share/zsh/site-functions" $fpath)
 ```
 
-Once loaded, completions cover subcommands (`dotty <TAB>`), repo names (`dotty update <TAB>`), file paths (`dotty add <TAB>`), and the `--repo` flag.
+Once loaded, completions cover subcommands (`dotty <TAB>`), repo names (`dotty update <TAB>`), repo-defined commands (`dotty run <TAB>`), file paths (`dotty add <TAB>`), and the `--repo` flag.
 
 ## Guard
 
@@ -478,7 +539,7 @@ git submodule update --init   # first time only
 Each test gets a fully isolated environment with a temporary `$HOME`, registry, and repo directory, so nothing touches your real dotfiles. The test files are:
 
 - `registry.bats` — registry CRUD
-- `commands.bats` — command-level behavior for `add`, `check`, `files`, and `status`
+- `commands.bats` — command-level behavior for `add`, `check`, `commands`, `files`, `run`, and `status`
 - `symlinks.bats` — symlink creation, directory merging, orphan cleanup
 - `chain.bats` — chain resolution, cycle detection, environment detection
 - `dry_run.bats` — dry-run mode

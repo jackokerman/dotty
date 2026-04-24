@@ -12,10 +12,19 @@ _dotty_registry_names() {
     compadd -a names
 }
 
+_dotty_custom_command_names() {
+    local -a names
+    names=("${(@f)$(command dotty commands 2>/dev/null | awk '{print $1}')}")
+    [[ ${#names[@]} -gt 0 ]] || return
+    compadd -a names
+}
+
 _dotty() {
     local -a commands=(
         'install:Resolve chain, clone deps, link files, run hooks'
         'update:Pull dotty and all repos, re-link, re-run hooks'
+        'commands:List repo-defined commands from the active chain'
+        'run:Run a repo-defined command from .dotty/commands/'
         'self-update:Update dotty itself'
         'add:Move a dotfile into a repo and symlink it back'
         'link:Re-create symlinks only (skip pull and hooks)'
@@ -63,6 +72,11 @@ _dotty() {
                     '*:file:_files'
             fi
             ;;
+        run)
+            if (( CURRENT == 3 )); then
+                _dotty_custom_command_names
+            fi
+            ;;
         register)
             if (( CURRENT == 3 )); then
                 _files -/
@@ -74,7 +88,7 @@ _dotty() {
         guard|unguard)
             _files -/
             ;;
-        self-update|shell-init)
+        commands|self-update|shell-init)
             ;;
     esac
 }

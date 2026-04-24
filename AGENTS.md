@@ -12,15 +12,17 @@
 - `lib/utils.sh` contains shared shell helpers used by hooks and related tooling.
 - `hooks/pre-commit` is the standalone guard hook installed by `dotty guard`; it reads newline-separated `DOTTY_GUARD_PATTERNS` at commit time.
 - `completions/_dotty` contains zsh completions.
+- `.dotty/commands/` in managed repos is the source of repo-defined `dotty run` commands.
 - `test/*.bats` is the repo's behavior test suite.
 
 ## Architecture
 
 - Dotty manages chains of dotfiles repos with later repos overriding earlier repos.
-- Managed repo discovery and compatibility live in the config and hook lookup helpers; keep `.dotty/config`, optional `.dotty/run.sh`, and migration behavior aligned with the tests and README.
+- Managed repo discovery and compatibility live in the config, hook lookup, and repo-command lookup helpers; keep `.dotty/config`, optional `.dotty/run.sh`, optional `.dotty/commands/`, and migration behavior aligned with the tests and README.
 - `home/` is symlinked into `$HOME`; `$ENV/home/` overlays are applied when an environment is detected.
 - `dotty install` resolves the chain, registers repos, links files, applies overlays, and runs hooks.
 - `dotty link` refreshes symlinks only. It does not pull repos or run hooks.
+- `dotty run` resolves repo-defined commands from the active chain and executes them from the defining repo root.
 - Directory conflicts are merged by exploding directory symlinks into real directories with child symlinks rather than replacing the whole directory.
 - Hook environment variables are `DOTTY_REPO_DIR`, `DOTTY_ENV`, and `DOTTY_COMMAND`.
 - Runtime state lives under `~/.dotty/`, especially `registry`, `repos/`, `backups/`, `bin/dotty`, and `.needs-reload`.

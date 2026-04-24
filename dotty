@@ -78,6 +78,16 @@ _find_hook() {
     fi
 }
 
+# Find the commands directory for a repo. Returns 1 if not found.
+_find_commands_dir() {
+    local repo_dir="$1"
+    if [[ -d "$repo_dir/.dotty/commands" ]]; then
+        echo "$repo_dir/.dotty/commands"
+    else
+        return 1
+    fi
+}
+
 # Returns true if the repo has a config file.
 _has_config() {
     local repo_dir="$1"
@@ -545,6 +555,140 @@ cmd_link() {
     else
         success "Linking complete!"
     fi
+}
+
+_resolve_repo_command() {
+    local target_name="$1"
+    local i repo_dir="" repo_name="" candidate=""
+    local found_repo_name="" found_repo_dir="" found_path="" found_executable="false"
+
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        repo_dir="${CHAIN_PATHS[$i]}"
+        repo_name="${CHAIN_NAMES[$i]}"
+        candidate="$repo_dir/.dotty/commands/$target_name"
+
+        if [[ -e "$candidate" ]]; then
+            found_repo_name="$repo_name"
+            found_repo_dir="$repo_dir"
+            found_path="$candidate"
+
+            if [[ -f "$candidate" && -x "$candidate" ]]; then
+                found_executable="true"
+            else
+                found_executable="false"
+            fi
+        fi
+    done
+
+    [[ -n "$found_path" ]] || return 1
+    printf '%s\t%s\t%s\t%s\n' "$found_repo_name" "$found_repo_dir" "$found_path" "$found_executable"
+}
+
+_resolved_repo_command_records() {
+    local -a names=() repo_names=() repo_dirs=() paths=() executable=()
+    local i repo_dir="" repo_name="" commands_dir="" item="" name="" index=-1
+
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        repo_dir="${CHAIN_PATHS[$i]}"
+        repo_name="${CHAIN_NAMES[$i]}"
+        commands_dir="$(_find_commands_dir "$repo_dir")" || continue
+
+        for item in "$commands_dir"/*; do
+            [[ -e "$item" ]] || continue
+            [[ -f "$item" ]] || continue
+
+            name="$(basename "$item")"
+            [[ "$name" == .* ]] && continue
+
+            index=-1
+            local existing_index
+            for existing_index in "${!names[@]}"; do
+                if [[ "${names[$existing_index]}" == "$name" ]]; then
+                    index="$existing_index"
+                    break
+                fi
+            done
+
+            if (( index < 0 )); then
+                names+=("$name")
+                repo_names+=("")
+                repo_dirs+=("")
+                paths+=("")
+                executable+=("false")
+                index=$((${#names[@]} - 1))
+            fi
+
+            names[$index]="$name"
+            repo_names[$index]="$repo_name"
+            repo_dirs[$index]="$repo_dir"
+            paths[$index]="$item"
+            if [[ -x "$item" ]]; then
+                executable[$index]="true"
+            else
+                executable[$index]="false"
+            fi
+        done
+    done
+
+    local output=""
+    for i in "${!names[@]}"; do
+        [[ "${executable[$i]}" == "true" ]] || continue
+        output+="${names[$i]}"$'\t'"${repo_names[$i]}"$'\t'"${repo_dirs[$i]}"$'\t'"${paths[$i]}"$'\n'
+    done
+
+    printf '%s' "$output" | LC_ALL=C sort
+}
+
+cmd_commands() {
+    [[ $# -eq 0 ]] || die "Usage: dotty commands"
+
+    registry_init
+    resolve_chain_from_leaf
+
+    local records=""
+    records="$(_resolved_repo_command_records)"
+    [[ -n "$records" ]] || return 0
+
+    while IFS=$'\t' read -r name repo_name _repo_dir _path || [[ -n "${name:-}${repo_name:-}" ]]; do
+        [[ -n "${name}" ]] || continue
+        printf '%s\t%s\n' "$name" "$repo_name"
+    done <<< "$records"
+}
+
+cmd_run() {
+    local target_name="${1:-}"
+    [[ -n "$target_name" ]] || die "Usage: dotty run <name> [args]"
+    shift || true
+
+    registry_init
+    resolve_chain_from_leaf
+
+    local repo_name="" repo_dir="" command_path="" executable="false"
+    if ! IFS=$'\t' read -r repo_name repo_dir command_path executable < <(_resolve_repo_command "$target_name"); then
+        die "Unknown repo-defined command: $target_name"
+    fi
+
+    [[ "$executable" == "true" ]] || die "Command '$target_name' exists but is not executable: $command_path"
+
+    if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+        info "[dry-run] Would run command '$target_name' from $repo_name"
+        return 0
+    fi
+
+    local env=""
+    env="$(detect_environment)"
+
+    export DOTTY_COMMAND="run"
+    export DOTTY_RUN_NAME="$target_name"
+    export DOTTY_RUN_REPO="$repo_dir"
+    export DOTTY_ENV="${env:-}"
+    export DOTTY_VERBOSE
+    export DOTTY_DRY_RUN
+    export DOTTY_LIB
+    DOTTY_LIB="$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
+
+    cd "$repo_dir"
+    exec "$command_path" "$@"
 }
 
 cmd_uninstall() {
@@ -1228,6 +1372,8 @@ Usage: dotty [-v] [-n] <command> [args]
 Commands:
   install [url-or-path]    Resolve chain, clone deps, link files, run hooks
   update [name]            Pull dotty and all repos, re-link, re-run hooks
+  commands                 List repo-defined commands from the active chain
+  run <name> [args]        Run a repo-defined command from .dotty/commands/
   self-update              Update dotty itself
   add <file> [--repo X]    Move a dotfile into a repo and symlink it back
   link [name]              Re-create symlinks only (skip pull and hooks)
@@ -1248,12 +1394,24 @@ Options:
   -v, --verbose            Show per-file skip messages (default: summary only)
   -n, --dry-run            Preview changes without modifying the filesystem
 
+Pass-through:
+  Use -- to stop dotty option parsing before repo-command args that reuse
+  -v/--verbose or -n/--dry-run. Example: dotty run foo -- --verbose
+
 Hook environment:
   DOTTY_REPO_DIR           Absolute path to the repo being processed
   DOTTY_ENV                Detected environment (empty if none)
   DOTTY_COMMAND            Command that invoked the hook (install or update)
   DOTTY_VERBOSE            "true" when -v/--verbose is set
   DOTTY_LIB                Path to hook utility library (source "$DOTTY_LIB")
+
+Repo command environment:
+  DOTTY_COMMAND            "run" while executing a repo-defined command
+  DOTTY_RUN_NAME           Resolved command name
+  DOTTY_RUN_REPO           Absolute path to the repo providing the command
+  DOTTY_ENV                Detected environment (empty if none)
+  DOTTY_VERBOSE            "true" when -v/--verbose is set
+  DOTTY_LIB                Path to command utility library (source "$DOTTY_LIB")
 
 Guard:
   DOTTY_GUARD_PATTERNS     Newline-separated patterns to block in commits
@@ -1310,14 +1468,27 @@ cmd_check() {
 
 main() {
     local args=()
+    local passthrough=false
     for arg in "$@"; do
-        case "$arg" in
-            -v|--verbose) DOTTY_VERBOSE=true ;;
-            -n|--dry-run) DOTTY_DRY_RUN=true ;;
-            *) args+=("$arg") ;;
-        esac
+        if [[ "$passthrough" == "false" ]]; then
+            case "$arg" in
+                --)
+                    passthrough=true
+                    continue
+                    ;;
+                -v|--verbose)
+                    DOTTY_VERBOSE=true
+                    continue
+                    ;;
+                -n|--dry-run)
+                    DOTTY_DRY_RUN=true
+                    continue
+                    ;;
+            esac
+        fi
+        args+=("$arg")
     done
-    set -- ${args[@]+"${args[@]}"}
+    set -- "${args[@]}"
     export DOTTY_VERBOSE
     export DOTTY_DRY_RUN
 
@@ -1327,6 +1498,8 @@ main() {
     case "$cmd" in
         install)      cmd_install "$@" ;;
         update)       cmd_update "$@" ;;
+        commands)     cmd_commands "$@" ;;
+        run)          cmd_run "$@" ;;
         self-update)  cmd_self_update "$@" ;;
         add)          cmd_add "$@" ;;
         link)         cmd_link "$@" ;;
