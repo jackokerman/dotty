@@ -83,7 +83,7 @@ curl -fsSL https://raw.githubusercontent.com/jackokerman/dotty/main/install.sh |
 
 > [!Note]
 >
-> The installer clones the dotty repo to `~/.dotty` and adds `~/.dotty/bin` to your `PATH` via `.bashrc`. If you use zsh, you'll want to add it to your `.zshrc` as well.
+> The installer clones the dotty repo to `~/.dotty`, then updates `.bashrc` or `.zshrc` based on `$SHELL` so `~/.dotty/bin` is on your `PATH` and `dotty shell-init` is enabled. If you use a different shell, add those lines manually.
 
 Once installed, point dotty at your dotfiles repo:
 
@@ -378,7 +378,9 @@ dotty doctor
 
 ### `dotty shell-init`
 
-Outputs a shell wrapper function that automatically reloads your shell after `dotty install` or `dotty update` makes changes. Add this to your `.zshrc` or `.bashrc`:
+Outputs a shell wrapper function that automatically reloads your shell after `dotty install` or `dotty update` makes changes.
+
+The installer adds this to `.bashrc` or `.zshrc` automatically when `$SHELL` is one of those shells. If you want to wire it up yourself, add this to your startup file:
 
 ```bash
 eval "$(dotty shell-init)"

@@ -17,7 +17,7 @@ The default next task is the top unchecked item under `Now`, then `Next`, then `
 
 ## Next
 
-- [ ] Revisit installer ergonomics for bash and zsh. Why: the current installer still assumes bash for PATH setup and leaves zsh users to finish the last step themselves. Done when: first-run shell setup is explicit and unsurprising for both shells.
+- [x] Revisit installer ergonomics for bash and zsh. Why: the installer needed to stop assuming bash for PATH setup and stop leaving zsh users to finish the last step themselves. Done when: first-run shell setup is explicit and unsurprising for both shells.
 - [ ] Cut the first tagged release for the public-ready baseline. Why: sharing a moving `main` branch is weaker than sharing a named release. Done when: `DOTTY_VERSION` is bumped, a tag is pushed, and release notes summarize the public baseline.
 - [ ] Tighten contributor ergonomics around examples and issue intake. Why: once the tool is shared, lightweight issue templates and a small example repo or fixture may pay off. Done when: public contributors have an obvious path to report bugs or propose changes without guessing project norms.
 

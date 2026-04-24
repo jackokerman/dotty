@@ -10,8 +10,8 @@ teardown() {
     teardown_test_env
 }
 
-@test "install.sh restores a full tracked tree into an existing DOTTY_DIR" {
-    local source_repo="$TEST_HOME/source-repo"
+make_installer_source_repo() {
+    local source_repo="$1"
     mkdir -p "$source_repo/lib" "$source_repo/hooks" "$source_repo/completions" "$source_repo/test/bats"
 
     cat > "$source_repo/.gitignore" <<'EOF'
@@ -39,6 +39,11 @@ EOF
     git -C "$source_repo" init -q
     git -C "$source_repo" add .
     git -C "$source_repo" -c user.name=Test -c user.email=test@example.com commit -q -m init
+}
+
+@test "install.sh restores a full tracked tree into an existing DOTTY_DIR" {
+    local source_repo="$TEST_HOME/source-repo"
+    make_installer_source_repo "$source_repo"
 
     mkdir -p "$DOTTY_DIR/repos" "$DOTTY_DIR/backups"
     echo "dotfiles=/tmp/example" > "$DOTTY_DIR/registry"
@@ -58,4 +63,40 @@ EOF
     run git -C "$DOTTY_DIR" status --short
     [[ "$status" -eq 0 ]]
     [[ -z "$output" ]]
+}
+
+@test "install.sh configures bash startup when SHELL is bash" {
+    local source_repo="$TEST_HOME/source-repo"
+    make_installer_source_repo "$source_repo"
+
+    run env HOME="$TEST_HOME" DOTTY_DIR="$DOTTY_DIR" DOTTY_REPO="$source_repo" SHELL=/bin/bash bash "$DOTTY_ROOT/install.sh"
+    [[ "$status" -eq 0 ]]
+    [[ -f "$TEST_HOME/.bashrc" ]]
+    [[ "$(grep -cF 'export PATH="$HOME/.dotty/bin:$PATH"' "$TEST_HOME/.bashrc")" -eq 1 ]]
+    [[ "$(grep -cF 'eval "$(dotty shell-init)"' "$TEST_HOME/.bashrc")" -eq 1 ]]
+    [[ ! -e "$TEST_HOME/.zshrc" ]]
+}
+
+@test "install.sh configures zsh startup when SHELL is zsh" {
+    local source_repo="$TEST_HOME/source-repo"
+    make_installer_source_repo "$source_repo"
+
+    run env HOME="$TEST_HOME" DOTTY_DIR="$DOTTY_DIR" DOTTY_REPO="$source_repo" SHELL=/bin/zsh bash "$DOTTY_ROOT/install.sh"
+    [[ "$status" -eq 0 ]]
+    [[ -f "$TEST_HOME/.zshrc" ]]
+    [[ "$(grep -cF 'export PATH="$HOME/.dotty/bin:$PATH"' "$TEST_HOME/.zshrc")" -eq 1 ]]
+    [[ "$(grep -cF 'eval "$(dotty shell-init)"' "$TEST_HOME/.zshrc")" -eq 1 ]]
+    [[ ! -e "$TEST_HOME/.bashrc" ]]
+}
+
+@test "install.sh adds shell-init without duplicating an existing PATH line" {
+    local source_repo="$TEST_HOME/source-repo"
+    make_installer_source_repo "$source_repo"
+
+    echo 'export PATH="$HOME/.dotty/bin:$PATH"' > "$TEST_HOME/.bashrc"
+
+    run env HOME="$TEST_HOME" DOTTY_DIR="$DOTTY_DIR" DOTTY_REPO="$source_repo" SHELL=/bin/bash bash "$DOTTY_ROOT/install.sh"
+    [[ "$status" -eq 0 ]]
+    [[ "$(grep -cF 'export PATH="$HOME/.dotty/bin:$PATH"' "$TEST_HOME/.bashrc")" -eq 1 ]]
+    [[ "$(grep -cF 'eval "$(dotty shell-init)"' "$TEST_HOME/.bashrc")" -eq 1 ]]
 }
