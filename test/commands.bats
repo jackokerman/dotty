@@ -53,6 +53,28 @@ teardown() {
     [[ -f "$DOTTY_REGISTRY" ]]
 }
 
+@test "cmd_check uses a 3-day default threshold" {
+    create_test_repo "dotfiles"
+    local repo_dir="$REPLY"
+    register_test_repo "dotfiles" "$repo_dir"
+
+    git -C "$repo_dir" init -q
+    local fetch_head="$repo_dir/.git/FETCH_HEAD"
+    : > "$fetch_head"
+
+    perl -e 'my ($age, $path) = @ARGV; my $t = time - $age; utime $t, $t, $path or die $!;' \
+        172800 "$fetch_head"
+    run cmd_check
+    [[ "$status" -eq 0 ]]
+    [[ -z "$output" ]]
+
+    perl -e 'my ($age, $path) = @ARGV; my $t = time - $age; utime $t, $t, $path or die $!;' \
+        345600 "$fetch_head"
+    run cmd_check
+    [[ "$status" -eq 1 ]]
+    [[ "$output" == *"Dotfiles haven't been synced in 4 days."* ]]
+}
+
 @test "cmd_files and cmd_status skip paths ignored by linking" {
     create_test_repo "dotfiles"
     local repo_dir="$REPLY"

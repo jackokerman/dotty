@@ -1771,7 +1771,7 @@ cmd_check() {
     [[ -n "${DOTTY_COMMAND:-}" ]] && return 0
     registry_init
 
-    local threshold="${DOTTY_CHECK_THRESHOLD:-86400}"
+    local threshold="${DOTTY_CHECK_THRESHOLD:-259200}"
     local now
     now="$(date +%s)"
 
