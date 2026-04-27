@@ -145,10 +145,14 @@ _create_bare_repo() {
     git init --bare "$bare_dir" >/dev/null 2>&1
     git -C "$source_dir" init >/dev/null 2>&1
     git -C "$source_dir" add -A >/dev/null 2>&1
-    git -C "$source_dir" commit -m "init" >/dev/null 2>&1
+    git -C "$source_dir" \
+        -c user.name="Dotty Tests" \
+        -c user.email="dotty-tests@example.com" \
+        commit -m "init" >/dev/null 2>&1
     git -C "$source_dir" remote add origin "$bare_dir" >/dev/null 2>&1
     git -C "$source_dir" push origin HEAD:main >/dev/null 2>&1
-    echo "$bare_dir"
+    git -C "$bare_dir" symbolic-ref HEAD refs/heads/main >/dev/null 2>&1
+    printf '%s\n' "$bare_dir"
 }
 
 @test "ensure_repo clones to target_dir when provided" {
