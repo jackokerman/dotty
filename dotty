@@ -152,7 +152,6 @@ resolve_chain() {
 
     read_config "$repo_dir"
     local name="$DOTTY_NAME"
-    local -a extends=(${DOTTY_EXTENDS[@]+"${DOTTY_EXTENDS[@]}"})
 
     # Skip if already resolved (diamond dependency deduplication)
     for existing in ${CHAIN_NAMES[@]+"${CHAIN_NAMES[@]}"}; do
@@ -166,7 +165,8 @@ resolve_chain() {
     _RESOLVING+=("$name")
 
     # Resolve parents first (so base repos come first in chain)
-    for parent_url in ${extends[@]+"${extends[@]}"}; do
+    local parent_url
+    for parent_url in ${DOTTY_EXTENDS[@]+"${DOTTY_EXTENDS[@]}"}; do
         local parent_dir
         parent_dir="$(ensure_repo "$parent_url")"
         resolve_chain "$parent_dir"
@@ -199,12 +199,28 @@ resolve_chain_from_leaf() {
         resolve_chain "$rpath" 2>/dev/null || true
         if [[ ${#CHAIN_NAMES[@]} -gt $best_len ]]; then
             best_len=${#CHAIN_NAMES[@]}
-            best_names=(${CHAIN_NAMES[@]+"${CHAIN_NAMES[@]}"})
-            best_paths=(${CHAIN_PATHS[@]+"${CHAIN_PATHS[@]}"})
+            best_names=()
+            best_paths=()
+            local chain_name
+            local chain_path
+            for chain_name in ${CHAIN_NAMES[@]+"${CHAIN_NAMES[@]}"}; do
+                best_names+=("$chain_name")
+            done
+            for chain_path in ${CHAIN_PATHS[@]+"${CHAIN_PATHS[@]}"}; do
+                best_paths+=("$chain_path")
+            done
         fi
     done
-    CHAIN_NAMES=(${best_names[@]+"${best_names[@]}"})
-    CHAIN_PATHS=(${best_paths[@]+"${best_paths[@]}"})
+    CHAIN_NAMES=()
+    CHAIN_PATHS=()
+    local best_name
+    local best_path
+    for best_name in ${best_names[@]+"${best_names[@]}"}; do
+        CHAIN_NAMES+=("$best_name")
+    done
+    for best_path in ${best_paths[@]+"${best_paths[@]}"}; do
+        CHAIN_PATHS+=("$best_path")
+    done
 }
 
 ensure_repo() {
@@ -550,9 +566,8 @@ _doctor_resolve_chain_no_clone() {
     done
     _DOCTOR_RESOLVING+=("$name")
 
-    local -a extends=(${DOTTY_EXTENDS[@]+"${DOTTY_EXTENDS[@]}"})
     local parent_source
-    for parent_source in "${extends[@]}"; do
+    for parent_source in ${DOTTY_EXTENDS[@]+"${DOTTY_EXTENDS[@]}"}; do
         local parent_dir
         parent_dir="$(_doctor_lookup_source "$parent_source")" || {
             _DOCTOR_ERROR="$name depends on $parent_source, but it is not installed or registered"
@@ -587,13 +602,29 @@ _doctor_resolve_from_leaf_no_clone() {
         found_valid=true
         if [[ ${#_DOCTOR_CHAIN_NAMES[@]} -gt $best_len ]]; then
             best_len=${#_DOCTOR_CHAIN_NAMES[@]}
-            best_names=(${_DOCTOR_CHAIN_NAMES[@]+"${_DOCTOR_CHAIN_NAMES[@]}"})
-            best_paths=(${_DOCTOR_CHAIN_PATHS[@]+"${_DOCTOR_CHAIN_PATHS[@]}"})
+            best_names=()
+            best_paths=()
+            local doctor_name
+            local doctor_path
+            for doctor_name in ${_DOCTOR_CHAIN_NAMES[@]+"${_DOCTOR_CHAIN_NAMES[@]}"}; do
+                best_names+=("$doctor_name")
+            done
+            for doctor_path in ${_DOCTOR_CHAIN_PATHS[@]+"${_DOCTOR_CHAIN_PATHS[@]}"}; do
+                best_paths+=("$doctor_path")
+            done
         fi
     done < "$DOTTY_REGISTRY"
 
-    _DOCTOR_CHAIN_NAMES=(${best_names[@]+"${best_names[@]}"})
-    _DOCTOR_CHAIN_PATHS=(${best_paths[@]+"${best_paths[@]}"})
+    _DOCTOR_CHAIN_NAMES=()
+    _DOCTOR_CHAIN_PATHS=()
+    local best_doctor_name
+    local best_doctor_path
+    for best_doctor_name in ${best_names[@]+"${best_names[@]}"}; do
+        _DOCTOR_CHAIN_NAMES+=("$best_doctor_name")
+    done
+    for best_doctor_path in ${best_paths[@]+"${best_paths[@]}"}; do
+        _DOCTOR_CHAIN_PATHS+=("$best_doctor_path")
+    done
 
     [[ "$found_valid" == "true" ]]
 }

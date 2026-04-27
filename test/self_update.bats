@@ -11,6 +11,20 @@ teardown() {
     teardown_test_env
 }
 
+init_dotty_git_repo() {
+    GIT_CONFIG_NOSYSTEM=1 git \
+        -c init.defaultBranch=main \
+        -c init.templateDir= \
+        init "$DOTTY_DIR" >/dev/null 2>&1
+    (
+        cd "$DOTTY_DIR"
+        GIT_CONFIG_NOSYSTEM=1 git \
+            -c user.name="Dotty Tests" \
+            -c user.email="dotty-tests@example.com" \
+            commit --allow-empty -m "init" >/dev/null 2>&1
+    )
+}
+
 @test "self_update: skips when DOTTY_DIR is not a git repo" {
     # DOTTY_DIR exists but has no .git
     run self_update
@@ -19,8 +33,7 @@ teardown() {
 }
 
 @test "self_update: dry-run logs without pulling" {
-    git init "$DOTTY_DIR" >/dev/null 2>&1
-    (cd "$DOTTY_DIR" && git commit --allow-empty -m "init" >/dev/null 2>&1)
+    init_dotty_git_repo
 
     export DOTTY_DRY_RUN=true
     run self_update
@@ -30,8 +43,7 @@ teardown() {
 }
 
 @test "cmd_self_update: reports already up to date" {
-    git init "$DOTTY_DIR" >/dev/null 2>&1
-    (cd "$DOTTY_DIR" && git commit --allow-empty -m "init" >/dev/null 2>&1)
+    init_dotty_git_repo
 
     run cmd_self_update
     [[ "$status" -eq 0 ]]
@@ -39,8 +51,7 @@ teardown() {
 }
 
 @test "cmd_self_update: dry-run logs without pulling" {
-    git init "$DOTTY_DIR" >/dev/null 2>&1
-    (cd "$DOTTY_DIR" && git commit --allow-empty -m "init" >/dev/null 2>&1)
+    init_dotty_git_repo
 
     export DOTTY_DRY_RUN=true
     run cmd_self_update
