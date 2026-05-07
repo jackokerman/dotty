@@ -19,11 +19,12 @@ The default next task is the top unchecked item under `Now`, then `Next`, then `
 
 - [x] Revisit installer ergonomics for bash and zsh. Why: the installer needed to stop assuming bash for PATH setup and stop leaving zsh users to finish the last step themselves. Done when: first-run shell setup is explicit and unsurprising for both shells.
 - [ ] Cut the first tagged release for the public-ready baseline. Why: sharing a moving `main` branch is weaker than sharing a named release. Done when: `DOTTY_VERSION` is bumped, a tag is pushed, and release notes summarize the public baseline.
+- [ ] Run a small outside-user onboarding pass. Why: the remaining readiness questions are mostly about whether fresh users can install from the docs and examples without handholding, not about missing core commands. Done when: a few outside users or clean-room installs surface concrete friction, and the follow-up gaps are captured in issues or the roadmap.
 - [x] Tighten contributor ergonomics around examples and issue intake. Why: once the tool is shared, lightweight issue templates and a small example repo or fixture reduce guesswork. Done when: the repo ships GitHub issue forms for bug reports and feature requests, a layered example under `examples/`, and contributor docs that point at both.
 
 ## Later
 
-- [ ] Revisit whether `dotty init` is worth adding. Why: it could shorten setup for new users, but it is only worth the complexity if docs and the installer still feel too manual. Done when: the decision is based on actual onboarding friction instead of speculation.
+- [ ] Revisit whether `dotty init`, starter profiles, or a richer starter repo kit are worth adding. Why: one-step coworker onboarding could help adoption, but it is only worth adding product or maintenance surface area if the current docs and examples still leave real users stuck. Done when: the decision is based on actual onboarding friction instead of speculation, and the chosen solution is justified against the simpler example-based approach.
 - [ ] Polish `status` and `trace` output based on real user feedback. Why: the right improvements will be obvious only after a few outside users try to debug their own setups. Done when: changes address concrete confusing cases, not hypothetical ones.
 
 ## Not now
