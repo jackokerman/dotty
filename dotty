@@ -405,6 +405,90 @@ pull_if_clean() {
     fi
 }
 
+_normalize_update_jobs() {
+    local raw="${DOTTY_UPDATE_JOBS:-1}"
+    if [[ -z "$raw" ]]; then
+        printf '1\n'
+        return 0
+    fi
+
+    if [[ "$raw" == *[!0-9]* ]]; then
+        warning "Invalid DOTTY_UPDATE_JOBS '$raw'; using 1"
+        printf '1\n'
+        return 0
+    fi
+
+    local jobs
+    jobs=$((10#$raw))
+    if [[ "$jobs" -lt 1 ]]; then
+        warning "Invalid DOTTY_UPDATE_JOBS '$raw'; using 1"
+        printf '1\n'
+        return 0
+    fi
+
+    printf '%s\n' "$jobs"
+}
+
+_wait_for_update_pull_jobs() {
+    local pid
+    for pid in "$@"; do
+        wait "$pid" || true
+    done
+}
+
+_run_update_pull_job() {
+    local dir="$1"
+    local log_path="$2"
+    local result_path="$3"
+
+    (
+        _DOTTY_CHANGES_MADE=false
+        pull_if_clean "$dir" || true
+        if [[ "$_DOTTY_CHANGES_MADE" == "true" ]]; then
+            printf 'changed\n' > "$result_path"
+        else
+            printf 'unchanged\n' > "$result_path"
+        fi
+    ) > "$log_path" 2>&1
+}
+
+_run_parallel_update_pulls() {
+    local jobs="$1"
+    local tmp_dir
+    tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/dotty-update-pulls.XXXXXX")" || die "Failed to create temp directory for update pulls"
+
+    local pids=()
+    local active=0
+    local i
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        _run_update_pull_job "${CHAIN_PATHS[$i]}" "$tmp_dir/$i.log" "$tmp_dir/$i.result" &
+        pids+=("$!")
+        active=$((active + 1))
+
+        if [[ "$active" -ge "$jobs" ]]; then
+            _wait_for_update_pull_jobs "${pids[@]}"
+            pids=()
+            active=0
+        fi
+    done
+
+    if [[ "$active" -gt 0 ]]; then
+        _wait_for_update_pull_jobs "${pids[@]}"
+    fi
+
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        if [[ -s "$tmp_dir/$i.log" ]]; then
+            cat "$tmp_dir/$i.log"
+        fi
+
+        if [[ -f "$tmp_dir/$i.result" && "$(cat "$tmp_dir/$i.result")" == "changed" ]]; then
+            _DOTTY_CHANGES_MADE=true
+        fi
+    done
+
+    rm -rf "$tmp_dir"
+}
+
 # Pull the dotty repo itself before processing the chain. The script is
 # wrapped in { ... } braces so bash reads it fully into memory before
 # executing, making mid-run file changes safe. The updated script takes
@@ -772,15 +856,29 @@ run_chain() {
         registry_set "${CHAIN_NAMES[$i]}" "${CHAIN_PATHS[$i]}"
     done
 
-    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
-        local dir="${CHAIN_PATHS[$i]}"
+    local update_jobs=1
+    if [[ "$pull" == "true" && "$command" == "update" && "${DOTTY_DRY_RUN:-false}" != "true" ]]; then
+        update_jobs="$(_normalize_update_jobs)"
+    fi
 
-        if [[ "$pull" == "true" && "${DOTTY_DRY_RUN:-false}" != "true" ]]; then
-            pull_if_clean "$dir"
-        fi
+    if [[ "$pull" == "true" && "$command" == "update" && "${DOTTY_DRY_RUN:-false}" != "true" && "$update_jobs" -gt 1 ]]; then
+        _run_parallel_update_pulls "$update_jobs"
 
-        process_repo "$dir" "$env" "$command"
-    done
+        for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+            local dir="${CHAIN_PATHS[$i]}"
+            process_repo "$dir" "$env" "$command"
+        done
+    else
+        for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+            local dir="${CHAIN_PATHS[$i]}"
+
+            if [[ "$pull" == "true" && "${DOTTY_DRY_RUN:-false}" != "true" ]]; then
+                pull_if_clean "$dir"
+            fi
+
+            process_repo "$dir" "$env" "$command"
+        done
+    fi
 
     # Print error summary if anything went wrong
     _CHAIN_HAD_ERRORS=false
@@ -2562,6 +2660,7 @@ Guard:
 
 General:
   DOTTY_DIR                Base directory for dotty state (default: ~/.dotty)
+  DOTTY_UPDATE_JOBS        Parallel git pulls for full-chain update (default: 1)
 EOF
 }
 

@@ -1,9 +1,9 @@
 ---
 id: 2026-06-25-plan-dotty-update-parallelization
 title: Plan dotty update parallelization
-state: ready-to-implement
+state: ready-to-ship
 createdAt: 2026-06-25T17:07:01.451Z
-updatedAt: 2026-06-25T17:25:11.529Z
+updatedAt: 2026-06-25T17:44:15.361Z
 ---
 
 # Plan dotty update parallelization

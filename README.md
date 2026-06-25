@@ -284,7 +284,10 @@ Pulls dotty itself, then pulls all repos (or a specific one) and re-runs the ful
 ```bash
 dotty update              # update dotty, pull and re-link everything
 dotty update dotfiles     # update dotty, pull just one repo, re-link the full chain
+DOTTY_UPDATE_JOBS=4 dotty update  # pull full-chain repos in parallel batches
 ```
+
+`DOTTY_UPDATE_JOBS` defaults to `1`, preserving serial pull behavior. Values greater than `1` apply only to full-chain `dotty update`; linking, cleanup tasks, hooks, `install`, dry-run, self-update, and `dotty update <name>` still run serially.
 
 ### `dotty commands`
 
@@ -708,6 +711,7 @@ Each test gets a fully isolated environment with a temporary `$HOME`, registry, 
 - `chain.bats` — chain resolution, cycle detection, environment detection
 - `dry_run.bats` — dry-run mode
 - `install.bats` — installer behavior for existing `~/.dotty` state
+- `update_parallel.bats` — opt-in parallel update pull scheduling
 - `trace.bats` — symlink provenance tracing
 - `files.bats` — file listing and status
 - `uninstall.bats` — repo uninstallation and backup restore
