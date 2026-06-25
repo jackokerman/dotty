@@ -17,7 +17,7 @@ teardown() {
     local lock_dir="$TEST_DOTTY_DIR/operation.lock"
     [[ -d "$lock_dir" ]]
     [[ "$(cat "$lock_dir/command")" == "update" ]]
-    [[ -s "$lock_dir/pid" ]]
+    [[ "$(cat "$lock_dir/pid")" == "${BASHPID:-$$}" ]]
     [[ -s "$lock_dir/started-at" ]]
 
     _release_operation_lock
