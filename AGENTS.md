@@ -45,6 +45,7 @@
 - Standard validation: `./test/bats/bin/bats test/`.
 - While iterating, run the smallest relevant bats file in addition to the full suite when practical.
 - For risky symlink or chain-resolution changes, test with a temporary repo before checking a real dotfiles setup.
+- For shared-state locking or serialization changes, also run a real mutating command smoke test and assert the lock or state artifact is cleaned up afterward.
 - When a change affects live linking or hooks, use `./dotty status` or `~/.dotty/registry` to discover the local chain, then run the smallest real command needed to validate it.
 
 ## Keep Docs In Sync
