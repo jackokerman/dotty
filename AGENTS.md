@@ -15,6 +15,7 @@
 - `.github/ISSUE_TEMPLATE/` contains the GitHub issue forms for bug reports and feature requests.
 - `examples/` contains contributor-facing sample dotfiles layouts referenced from the docs and issue forms.
 - `.dotty/commands/` in managed repos is the source of repo-defined `dotty run` commands.
+- `.dotty/cleanups/` in managed repos is the source of one-shot cleanup tasks that run during `install` and `update`.
 - `test/*.bats` is the repo's behavior test suite.
 
 ## Architecture
@@ -23,6 +24,7 @@
 - Managed repo discovery and compatibility live in the config, hook lookup, and repo-command lookup helpers; keep `.dotty/config`, optional `.dotty/run.sh`, optional `.dotty/commands/`, and migration behavior aligned with the tests and README.
 - `home/` is symlinked into `$HOME`; `$ENV/home/` overlays are applied when an environment is detected.
 - `dotty install` resolves the chain, registers repos, links files, applies overlays, and runs hooks.
+- Pending one-shot cleanups run after linking and before hooks, with local completion state under `~/.dotty/cleanups/`.
 - `dotty link` refreshes symlinks only. It does not pull repos or run hooks.
 - `dotty run` resolves repo-defined commands from the active chain and executes them from the defining repo root.
 - Directory conflicts are merged by exploding directory symlinks into real directories with child symlinks rather than replacing the whole directory.

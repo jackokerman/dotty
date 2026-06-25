@@ -1,9 +1,9 @@
 ---
 id: 2026-06-24-design-dotty-one-shot-cleanup-tasks
 title: Design dotty one-shot cleanup tasks
-state: ready-to-implement
+state: complete
 createdAt: 2026-06-24T23:37:29.430Z
-updatedAt: 2026-06-24T23:51:33.729Z
+updatedAt: 2026-06-25T00:19:11.428Z
 ---
 
 # Design dotty one-shot cleanup tasks

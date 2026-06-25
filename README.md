@@ -144,6 +144,8 @@ my-dotfiles/
 │   ├── config              # config (required)
 │   ├── commands/           # repo-defined dotty commands (optional)
 │   │   └── my-command      # executable, runnable via `dotty run my-command`
+│   ├── cleanups/           # one-shot cleanup tasks (optional)
+│   │   └── 2026-remove-old-tool
 │   └── run.sh              # hook script (optional, must be executable)
 ├── home/                   # symlinked to $HOME
 │   ├── .zshrc              # → ~/.zshrc
@@ -179,9 +181,11 @@ Running `dotty install ~/work-dotfiles` kicks off the following:
 1. Reads `work-dotfiles/.dotty/config`, sees it extends personal dotfiles
 2. Clones personal dotfiles to `~/.dotty/repos/dotfiles` (dependency, auto-cloned)
 3. Symlinks `dotfiles/home/` into `$HOME` (base layer)
-4. Runs `dotfiles/.dotty/run.sh`
-5. Symlinks `work-dotfiles/home/` into `$HOME` (overlay, wins on conflicts)
-6. Runs `work-dotfiles/.dotty/run.sh`
+4. Runs pending one-shot cleanup tasks from `dotfiles/.dotty/cleanups/`
+5. Runs `dotfiles/.dotty/run.sh`
+6. Symlinks `work-dotfiles/home/` into `$HOME` (overlay, wins on conflicts)
+7. Runs pending one-shot cleanup tasks from `work-dotfiles/.dotty/cleanups/`
+8. Runs `work-dotfiles/.dotty/run.sh`
 
 ### Directory merging
 
@@ -303,6 +307,18 @@ dotty run my-command -- --verbose
 
 This is an explicit command surface. Built-in dotty commands keep their existing names and behavior; dotty does not fall through unknown commands automatically.
 
+### `dotty cleanups [--all] [--pending]`
+
+Lists one-shot cleanup tasks discovered from `.dotty/cleanups/` across the active chain and shows their local state.
+
+```bash
+dotty cleanups           # pending, done, and failed applicable tasks
+dotty cleanups --pending # only pending applicable tasks
+dotty cleanups --all     # also show non-applicable tasks
+```
+
+Completion is tracked locally under `~/.dotty/cleanups/<repo>/<cleanup-id>/`. It is not a shared cross-machine receipt. If a cleanup needs to run again, give the next version a new id.
+
 ### `dotty self-update`
 
 Updates dotty itself without touching the chain. Useful when you just want the latest version of the tool without re-running the full install or update cycle.
@@ -372,7 +388,7 @@ dotty trace ~/.config/git
 
 ### `dotty doctor`
 
-Runs read-only diagnostics against your installed state. It checks registered paths, config discovery, non-mutating chain resolution, environment declarations, executable hooks, and repo-defined commands. It exits non-zero on failures and zero on success or warnings-only.
+Runs read-only diagnostics against your installed state. It checks registered paths, config discovery, non-mutating chain resolution, environment declarations, executable hooks, repo-defined commands, and cleanup task definitions. It exits non-zero on failures and zero on success or warnings-only.
 
 ```bash
 dotty doctor
@@ -418,7 +434,7 @@ Global dotty options can be placed before or after the command name.
 
 `-v`, `--verbose` — Show per-file messages instead of just summary counts. Useful for debugging which files are being linked, skipped, or cleaned up.
 
-`-n`, `--dry-run` — Preview what would change without modifying the filesystem. Shows symlinks that would be created, updated, or removed (orphan cleanup). Hooks and git pulls are skipped entirely.
+`-n`, `--dry-run` — Preview what would change without modifying the filesystem. Shows symlinks that would be created, updated, or removed (orphan cleanup), and pending cleanups that would run. Cleanup scripts, hooks, and git pulls are skipped entirely.
 
 ```bash
 dotty --dry-run link      # see what link would do
@@ -440,6 +456,7 @@ If a repo has an executable hook script at `.dotty/run.sh`, dotty runs it after 
 - `DOTTY_ENV` — detected environment (empty if none)
 - `DOTTY_COMMAND` — the command that invoked the hook (`install` or `update`)
 - `DOTTY_VERBOSE` — `"true"` when `-v`/`--verbose` is set
+- `DOTTY_DRY_RUN` — `"true"` when `-n`/`--dry-run` is set
 - `DOTTY_LIB` — path to the hook utility library (see [Hook utilities](#hook-utilities))
 
 Hooks run with the repo as the working directory. They're the right place for installing packages (`brew bundle`, `apt install`), merging JSON settings, setting up services, or anything OS-specific.
@@ -478,6 +495,55 @@ if [[ ! -f "$marker" ]]; then
     touch "$marker"
 fi
 ```
+
+## One-shot cleanup tasks
+
+Use `.dotty/cleanups/` for temporary cleanup or migration logic that should run once on each machine, instead of leaving that logic in `.dotty/run.sh` forever.
+
+A cleanup task can be a single executable file:
+
+```text
+.dotty/cleanups/2026-remove-old-tool
+```
+
+Or a directory with a `run.sh` script and optional metadata:
+
+```text
+.dotty/cleanups/2026-remove-old-tool/
+├── config
+└── run.sh
+```
+
+Dotty runs pending applicable cleanups during `install` and `update`, after symlinks are refreshed and before `.dotty/run.sh`. It does not run cleanups during `link`. A cleanup is marked done only after it exits successfully.
+
+Optional `config` files are Bash and support these metadata variables:
+
+```bash
+DOTTY_CLEANUP_ENVIRONMENTS=("laptop" "remote")
+DOTTY_CLEANUP_MACHINES=("work-laptop")
+DOTTY_CLEANUP_DESCRIPTION="Remove old tool state"
+```
+
+`DOTTY_CLEANUP_MACHINES` matches `DOTTY_MACHINE_ID`, falling back to the first line of `~/.dotty/machine-id`. If no machine id is available, machine-scoped cleanups are skipped as not applicable.
+
+Cleanup scripts run from the repo root and receive the hook environment plus:
+
+- `DOTTY_CLEANUP_ID` — cleanup task id
+- `DOTTY_CLEANUP_STATE_DIR` — local state directory for the task
+- `DOTTY_MACHINE_ID` — current machine id, when known
+
+Example migration from a permanent hook cleanup:
+
+```bash
+#!/usr/bin/env bash
+# .dotty/cleanups/2026-remove-old-tool/run.sh
+set -euo pipefail
+
+rm -rf "$HOME/.config/old-tool"
+rm -f "$HOME/.local/bin/old-tool"
+```
+
+After this cleanup has propagated and `dotty cleanups` shows it as done where you care, remove the cleanup file from the repo in a later commit.
 
 ## Repo-Defined Commands
 
@@ -601,6 +667,7 @@ Dotty stores everything in `~/.dotty/`:
 ├── registry            # name=path, one per line
 ├── repos/              # auto-cloned repos
 ├── backups/            # backed-up files replaced by symlinks
+├── cleanups/           # local one-shot cleanup task receipts
 ├── completions/        # shell completions
 └── .needs-reload       # marker for shell-init wrapper (transient)
 ```

@@ -9,6 +9,7 @@ DOTTY_DIR="${DOTTY_DIR:-$HOME/.dotty}"
 DOTTY_REGISTRY="$DOTTY_DIR/registry"
 DOTTY_REPOS_DIR="$DOTTY_DIR/repos"
 DOTTY_BACKUPS_DIR="$DOTTY_DIR/backups"
+DOTTY_CLEANUPS_DIR="$DOTTY_DIR/cleanups"
 DOTTY_VERBOSE="${DOTTY_VERBOSE:-false}"
 DOTTY_DRY_RUN="${DOTTY_DRY_RUN:-false}"
 _DOTTY_CHANGES_MADE=false
@@ -19,7 +20,7 @@ source "$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
 # Registry
 
 registry_init() {
-    mkdir -p "$DOTTY_DIR" "$DOTTY_REPOS_DIR" "$DOTTY_BACKUPS_DIR"
+    mkdir -p "$DOTTY_DIR" "$DOTTY_REPOS_DIR" "$DOTTY_BACKUPS_DIR" "$DOTTY_CLEANUPS_DIR"
     touch "$DOTTY_REGISTRY"
 }
 
@@ -88,6 +89,16 @@ _find_commands_dir() {
     fi
 }
 
+# Find the cleanups directory for a repo. Returns 1 if not found.
+_find_cleanups_dir() {
+    local repo_dir="$1"
+    if [[ -d "$repo_dir/.dotty/cleanups" ]]; then
+        echo "$repo_dir/.dotty/cleanups"
+    else
+        return 1
+    fi
+}
+
 # Returns true if the repo has a config file.
 _has_config() {
     local repo_dir="$1"
@@ -103,6 +114,7 @@ _reset_config_state() {
 }
 
 _CONFIG_LOAD_ERROR=""
+_CLEANUP_CONFIG_LOAD_ERROR=""
 
 _load_config_file() {
     local conf="$1"
@@ -120,6 +132,48 @@ _load_config_file() {
         _CONFIG_LOAD_ERROR="DOTTY_NAME is required in $conf"
         return 1
     fi
+}
+
+_reset_cleanup_config_state() {
+    local var
+    while IFS= read -r var; do
+        case "$var" in
+            DOTTY_CLEANUP_ENVIRONMENTS|DOTTY_CLEANUP_MACHINES|DOTTY_CLEANUP_DESCRIPTION)
+                ;;
+            *)
+                unset "$var"
+                ;;
+        esac
+    done < <(compgen -A variable DOTTY_CLEANUP_ || true)
+
+    DOTTY_CLEANUP_ENVIRONMENTS=()
+    DOTTY_CLEANUP_MACHINES=()
+    DOTTY_CLEANUP_DESCRIPTION=""
+}
+
+_load_cleanup_config_file() {
+    local conf="$1"
+
+    _CLEANUP_CONFIG_LOAD_ERROR=""
+    _reset_cleanup_config_state
+
+    # shellcheck disable=SC1090
+    if ! source "$conf"; then
+        _CLEANUP_CONFIG_LOAD_ERROR="Failed to load $conf"
+        return 1
+    fi
+
+    local var
+    while IFS= read -r var; do
+        case "$var" in
+            DOTTY_CLEANUP_ENVIRONMENTS|DOTTY_CLEANUP_MACHINES|DOTTY_CLEANUP_DESCRIPTION)
+                ;;
+            *)
+                _CLEANUP_CONFIG_LOAD_ERROR="Unsupported cleanup config variable: $var"
+                return 1
+                ;;
+        esac
+    done < <(compgen -A variable DOTTY_CLEANUP_ || true)
 }
 
 # Sets: DOTTY_NAME, DOTTY_EXTENDS, DOTTY_ENVIRONMENTS, DOTTY_ENV_DETECT
@@ -375,6 +429,258 @@ _write_reload_marker() {
     fi
 }
 
+_current_machine_id() {
+    if [[ -n "${DOTTY_MACHINE_ID:-}" ]]; then
+        printf '%s\n' "$DOTTY_MACHINE_ID"
+        return 0
+    fi
+
+    local machine_id_file="$DOTTY_DIR/machine-id"
+    if [[ -f "$machine_id_file" ]]; then
+        local machine_id
+        machine_id="$(sed -n '1p' "$machine_id_file")"
+        if [[ -n "$machine_id" ]]; then
+            printf '%s\n' "$machine_id"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+_cleanup_state_dir() {
+    local repo_name="$1"
+    local cleanup_id="$2"
+    printf '%s\n' "$DOTTY_CLEANUPS_DIR/$repo_name/$cleanup_id"
+}
+
+_cleanup_status() {
+    local repo_name="$1"
+    local cleanup_id="$2"
+    local state_dir
+    state_dir="$(_cleanup_state_dir "$repo_name" "$cleanup_id")"
+
+    if [[ -f "$state_dir/done" ]]; then
+        printf 'done\n'
+    elif [[ -f "$state_dir/failed" ]]; then
+        printf 'failed\n'
+    else
+        printf 'pending\n'
+    fi
+}
+
+_cleanup_script_path() {
+    local cleanup_path="$1"
+
+    if [[ -f "$cleanup_path" ]]; then
+        printf '%s\n' "$cleanup_path"
+        return 0
+    fi
+
+    if [[ -d "$cleanup_path" && -f "$cleanup_path/run.sh" ]]; then
+        printf '%s\n' "$cleanup_path/run.sh"
+        return 0
+    fi
+
+    return 1
+}
+
+_cleanup_config_path() {
+    local cleanup_path="$1"
+
+    if [[ -d "$cleanup_path" && -f "$cleanup_path/config" ]]; then
+        printf '%s\n' "$cleanup_path/config"
+        return 0
+    fi
+
+    return 1
+}
+
+_cleanup_metadata_load() {
+    local cleanup_path="$1"
+    local config_path
+
+    _reset_cleanup_config_state
+    config_path="$(_cleanup_config_path "$cleanup_path")" || return 0
+    _load_cleanup_config_file "$config_path"
+}
+
+_cleanup_applies_to_env() {
+    local env="$1"
+
+    [[ ${#DOTTY_CLEANUP_ENVIRONMENTS[@]} -eq 0 ]] && return 0
+    [[ -n "$env" ]] || return 1
+
+    local target_env
+    for target_env in ${DOTTY_CLEANUP_ENVIRONMENTS[@]+"${DOTTY_CLEANUP_ENVIRONMENTS[@]}"}; do
+        [[ "$target_env" == "$env" ]] && return 0
+    done
+
+    return 1
+}
+
+_cleanup_applies_to_machine() {
+    local machine_id="$1"
+
+    [[ ${#DOTTY_CLEANUP_MACHINES[@]} -eq 0 ]] && return 0
+    [[ -n "$machine_id" ]] || return 1
+
+    local target_machine
+    for target_machine in ${DOTTY_CLEANUP_MACHINES[@]+"${DOTTY_CLEANUP_MACHINES[@]}"}; do
+        [[ "$target_machine" == "$machine_id" ]] && return 0
+    done
+
+    return 1
+}
+
+_cleanup_not_applicable_reason() {
+    local env="$1"
+    local machine_id="$2"
+
+    if ! _cleanup_applies_to_env "$env"; then
+        if [[ -z "$env" ]]; then
+            printf 'environment unavailable\n'
+        else
+            printf 'environment %s\n' "$env"
+        fi
+        return 0
+    fi
+
+    if ! _cleanup_applies_to_machine "$machine_id"; then
+        if [[ -z "$machine_id" ]]; then
+            printf 'machine id unavailable\n'
+        else
+            printf 'machine %s\n' "$machine_id"
+        fi
+        return 0
+    fi
+
+    printf '\n'
+}
+
+_cleanup_record_success() {
+    local repo_name="$1"
+    local cleanup_id="$2"
+    local script_path="$3"
+    local state_dir
+    state_dir="$(_cleanup_state_dir "$repo_name" "$cleanup_id")"
+
+    mkdir -p "$state_dir"
+    printf '%s\n' "$script_path" > "$state_dir/source"
+    date -u '+%Y-%m-%dT%H:%M:%SZ' > "$state_dir/completed-at"
+    : > "$state_dir/done"
+    rm -f "$state_dir/failed" "$state_dir/failed-at" "$state_dir/exit-code"
+}
+
+_cleanup_record_failure() {
+    local repo_name="$1"
+    local cleanup_id="$2"
+    local script_path="$3"
+    local exit_code="$4"
+    local state_dir
+    state_dir="$(_cleanup_state_dir "$repo_name" "$cleanup_id")"
+
+    mkdir -p "$state_dir"
+    printf '%s\n' "$script_path" > "$state_dir/source"
+    printf '%s\n' "$exit_code" > "$state_dir/exit-code"
+    date -u '+%Y-%m-%dT%H:%M:%SZ' > "$state_dir/failed-at"
+    : > "$state_dir/failed"
+}
+
+run_pending_cleanups() {
+    local repo_dir="$1"
+    local repo_name="$2"
+    local env="$3"
+    local command="$4"
+
+    [[ "$command" == "install" || "$command" == "update" ]] || return 0
+
+    local cleanups_dir
+    cleanups_dir="$(_find_cleanups_dir "$repo_dir")" || return 0
+
+    local machine_id=""
+    machine_id="$(_current_machine_id 2>/dev/null)" || true
+
+    local cleanup_path
+    for cleanup_path in "$cleanups_dir"/*; do
+        [[ -e "$cleanup_path" || -L "$cleanup_path" ]] || continue
+
+        local cleanup_id
+        cleanup_id="$(basename "$cleanup_path")"
+        [[ "$cleanup_id" == .* ]] && continue
+
+        if [[ -L "$cleanup_path" && ! -e "$cleanup_path" ]]; then
+            warning "cleanup '$cleanup_id' is a broken symlink in $repo_name"
+            _CLEANUP_ERRORS+=("$repo_name/$cleanup_id")
+            continue
+        fi
+
+        local script_path
+        script_path="$(_cleanup_script_path "$cleanup_path")" || {
+            warning "cleanup '$cleanup_id' is malformed in $repo_name"
+            _CLEANUP_ERRORS+=("$repo_name/$cleanup_id")
+            continue
+        }
+
+        if [[ ! -x "$script_path" ]]; then
+            warning "cleanup '$cleanup_id' exists but is not executable in $repo_name"
+            _CLEANUP_ERRORS+=("$repo_name/$cleanup_id")
+            continue
+        fi
+
+        if ! _cleanup_metadata_load "$cleanup_path"; then
+            warning "cleanup '$cleanup_id' config is invalid in $repo_name: ${_CLEANUP_CONFIG_LOAD_ERROR:-unknown error}"
+            _CLEANUP_ERRORS+=("$repo_name/$cleanup_id")
+            continue
+        fi
+
+        if ! _cleanup_applies_to_env "$env" || ! _cleanup_applies_to_machine "$machine_id"; then
+            verbose_info "Skipping cleanup '$cleanup_id' in $repo_name ($(_cleanup_not_applicable_reason "$env" "$machine_id"))"
+            continue
+        fi
+
+        local status
+        status="$(_cleanup_status "$repo_name" "$cleanup_id")"
+        if [[ "$status" == "done" ]]; then
+            verbose_info "Skipping completed cleanup '$cleanup_id' in $repo_name"
+            continue
+        fi
+
+        if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+            info "[dry-run] Would run cleanup '$cleanup_id' in $repo_name"
+            continue
+        fi
+
+        local state_dir
+        state_dir="$(_cleanup_state_dir "$repo_name" "$cleanup_id")"
+        mkdir -p "$state_dir"
+        info "Running cleanup $cleanup_id"
+        if (
+            export DOTTY_REPO_DIR="$repo_dir"
+            export DOTTY_ENV="${env:-}"
+            export DOTTY_COMMAND="${command:-}"
+            export DOTTY_VERBOSE
+            export DOTTY_DRY_RUN
+            export DOTTY_LIB
+            export DOTTY_CLEANUP_ID="$cleanup_id"
+            export DOTTY_CLEANUP_STATE_DIR="$state_dir"
+            if [[ -n "$machine_id" ]]; then
+                export DOTTY_MACHINE_ID="$machine_id"
+            fi
+            DOTTY_LIB="$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
+            cd "$repo_dir"
+            "$script_path"
+        ); then
+            _cleanup_record_success "$repo_name" "$cleanup_id" "$script_path"
+        else
+            local exit_code=$?
+            _cleanup_record_failure "$repo_name" "$cleanup_id" "$script_path" "$exit_code"
+            warning "cleanup '$cleanup_id' failed in $repo_name (exit $exit_code)"
+            _CLEANUP_ERRORS+=("$repo_name/$cleanup_id")
+        fi
+    done
+}
+
 process_repo() {
     local repo_dir="$1"
     local env="${2:-}"
@@ -414,6 +720,9 @@ process_repo() {
         create_symlinks_from_dir "$repo_dir/$env/home" "$HOME"
     fi
 
+    # Run one-shot cleanup tasks after links are refreshed and before hooks.
+    run_pending_cleanups "$repo_dir" "$name" "$env" "$command"
+
     # Run hook (non-fatal so later repos still process).
     # Hooks are skipped during "link" (symlink-only mode) and dry-run.
     if [[ "$command" != "link" && "${DOTTY_DRY_RUN:-false}" != "true" ]]; then
@@ -428,6 +737,7 @@ process_repo() {
                 export DOTTY_ENV="${env:-}"
                 export DOTTY_COMMAND="${command:-}"
                 export DOTTY_VERBOSE
+                export DOTTY_DRY_RUN
                 export DOTTY_LIB
                 DOTTY_LIB="$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
                 cd "$repo_dir"
@@ -453,6 +763,7 @@ run_chain() {
     fi
 
     _HOOK_ERRORS=()
+    _CLEANUP_ERRORS=()
     _LINK_FAIL_COUNT=0
 
     # Register all repos first so the registry is complete even if a hook fails.
@@ -476,6 +787,10 @@ run_chain() {
     if [[ ${#_HOOK_ERRORS[@]} -gt 0 ]]; then
         _CHAIN_HAD_ERRORS=true
         warning "Hook failures: ${_HOOK_ERRORS[*]}"
+    fi
+    if [[ ${#_CLEANUP_ERRORS[@]} -gt 0 ]]; then
+        _CHAIN_HAD_ERRORS=true
+        warning "Cleanup failures: ${_CLEANUP_ERRORS[*]}"
     fi
     if [[ $_LINK_FAIL_COUNT -gt 0 ]]; then
         _CHAIN_HAD_ERRORS=true
@@ -711,6 +1026,88 @@ _doctor_check_commands() {
     fi
 }
 
+_doctor_check_cleanups() {
+    local repo_name="$1"
+    local repo_dir="$2"
+    local cleanups_dir="$repo_dir/.dotty/cleanups"
+    local found_cleanups=false
+
+    if [[ -L "$cleanups_dir" && ! -e "$cleanups_dir" ]]; then
+        doctor_fail "$repo_name: .dotty/cleanups is a broken symlink"
+        return 0
+    fi
+
+    if [[ ! -e "$cleanups_dir" ]]; then
+        doctor_success "$repo_name: no cleanup tasks"
+        return 0
+    fi
+
+    if [[ ! -d "$cleanups_dir" ]]; then
+        doctor_fail "$repo_name: .dotty/cleanups exists but is not a directory"
+        return 0
+    fi
+
+    local item
+    for item in "$cleanups_dir"/* "$cleanups_dir"/.*; do
+        [[ -e "$item" || -L "$item" ]] || continue
+
+        local cleanup_id
+        cleanup_id="$(basename "$item")"
+        [[ "$cleanup_id" == "." || "$cleanup_id" == ".." || "$cleanup_id" == .* ]] && continue
+
+        found_cleanups=true
+
+        if [[ -L "$item" && ! -e "$item" ]]; then
+            doctor_fail "$repo_name: cleanup '$cleanup_id' is a broken symlink"
+            continue
+        fi
+
+        local script_path=""
+        if [[ -f "$item" ]]; then
+            script_path="$item"
+        elif [[ -d "$item" ]]; then
+            script_path="$item/run.sh"
+            if [[ -L "$script_path" && ! -e "$script_path" ]]; then
+                doctor_fail "$repo_name: cleanup '$cleanup_id' run.sh is a broken symlink"
+                continue
+            fi
+            if [[ ! -f "$script_path" ]]; then
+                doctor_fail "$repo_name: cleanup '$cleanup_id' is missing run.sh"
+                continue
+            fi
+        else
+            doctor_fail "$repo_name: cleanup '$cleanup_id' is not a file or directory"
+            continue
+        fi
+
+        if [[ ! -x "$script_path" ]]; then
+            doctor_fail "$repo_name: cleanup '$cleanup_id' exists but is not executable"
+            continue
+        fi
+
+        if [[ -d "$item" && -e "$item/config" ]]; then
+            if [[ -L "$item/config" && ! -e "$item/config" ]]; then
+                doctor_fail "$repo_name: cleanup '$cleanup_id' config is a broken symlink"
+                continue
+            fi
+            if [[ ! -f "$item/config" ]]; then
+                doctor_fail "$repo_name: cleanup '$cleanup_id' config is not a file"
+                continue
+            fi
+            if ! _load_cleanup_config_file "$item/config"; then
+                doctor_fail "$repo_name: cleanup '$cleanup_id' config is invalid: ${_CLEANUP_CONFIG_LOAD_ERROR:-unknown error}"
+                continue
+            fi
+        fi
+
+        doctor_success "$repo_name: cleanup '$cleanup_id' is valid"
+    done
+
+    if [[ "$found_cleanups" == "false" ]]; then
+        doctor_success "$repo_name: no cleanup tasks"
+    fi
+}
+
 # Commands
 
 cmd_install() {
@@ -813,6 +1210,115 @@ cmd_link() {
         warning "$_LINK_FAIL_COUNT symlink(s) failed to create"
     else
         success "Linking complete!"
+    fi
+}
+
+cmd_cleanups() {
+    local include_all=false
+    local pending_only=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --all)
+                include_all=true
+                shift
+                ;;
+            --pending)
+                pending_only=true
+                shift
+                ;;
+            *)
+                die "Usage: dotty cleanups [--all] [--pending]"
+                ;;
+        esac
+    done
+
+    registry_init
+    resolve_chain_from_leaf
+
+    local env=""
+    env="$(detect_environment 2>/dev/null)" || true
+
+    local machine_id=""
+    machine_id="$(_current_machine_id 2>/dev/null)" || true
+
+    title "dotty cleanups"
+    if [[ -n "$env" ]]; then
+        echo -e "Env:     ${COLOR_GREEN}$env${COLOR_NONE}"
+    fi
+    if [[ -n "$machine_id" ]]; then
+        echo -e "Machine: ${COLOR_GREEN}$machine_id${COLOR_NONE}"
+    fi
+
+    local printed_any=false
+    local i
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        local repo_name="${CHAIN_NAMES[$i]}"
+        local repo_dir="${CHAIN_PATHS[$i]}"
+        local cleanups_dir
+        cleanups_dir="$(_find_cleanups_dir "$repo_dir")" || continue
+
+        local -a lines=()
+        local cleanup_path
+        for cleanup_path in "$cleanups_dir"/*; do
+            [[ -e "$cleanup_path" || -L "$cleanup_path" ]] || continue
+
+            local cleanup_id
+            cleanup_id="$(basename "$cleanup_path")"
+            [[ "$cleanup_id" == .* ]] && continue
+
+            local description=""
+            local applicability="applicable"
+            local reason=""
+
+            if ! _cleanup_metadata_load "$cleanup_path"; then
+                description="${_CLEANUP_CONFIG_LOAD_ERROR:-invalid config}"
+                applicability="not applicable"
+                reason="invalid config"
+            else
+                description="$DOTTY_CLEANUP_DESCRIPTION"
+                if ! _cleanup_applies_to_env "$env" || ! _cleanup_applies_to_machine "$machine_id"; then
+                    applicability="not applicable"
+                    reason="$(_cleanup_not_applicable_reason "$env" "$machine_id")"
+                fi
+            fi
+
+            local status
+            status="$(_cleanup_status "$repo_name" "$cleanup_id")"
+
+            if [[ "$applicability" != "applicable" ]]; then
+                if [[ "$include_all" != "true" && "${DOTTY_VERBOSE:-false}" != "true" ]]; then
+                    continue
+                fi
+                status="not applicable"
+            fi
+
+            if [[ "$pending_only" == "true" && "$status" != "pending" ]]; then
+                continue
+            fi
+
+            local line="  $status  $cleanup_id"
+            if [[ -n "$description" ]]; then
+                line+="  $description"
+            fi
+            if [[ -n "$reason" && "$status" == "not applicable" ]]; then
+                line+=" ($reason)"
+            fi
+            lines+=("$line")
+        done
+
+        if [[ ${#lines[@]} -eq 0 ]]; then
+            continue
+        fi
+
+        echo ""
+        title "$repo_name"
+        printf '%s\n' "${lines[@]}"
+        printed_any=true
+    done
+
+    if [[ "$printed_any" == "false" ]]; then
+        info "No cleanup tasks found."
     fi
 }
 
@@ -1599,6 +2105,7 @@ cmd_doctor() {
 
         _doctor_check_hook "$registered_name" "$repo_path"
         _doctor_check_commands "$registered_name" "$repo_path"
+        _doctor_check_cleanups "$registered_name" "$repo_path"
         valid_repo_paths+=("$repo_path")
     done < "$DOTTY_REGISTRY"
 
@@ -1744,6 +2251,7 @@ Commands:
   update [name]            Pull dotty and all repos, re-link, re-run hooks
   commands                 List repo-defined commands from the active chain
   run <name> [args]        Run a repo-defined command from .dotty/commands/
+  cleanups [opts]          List one-shot cleanup task state
   self-update              Update dotty itself
   add <file> [--repo X]    Move a dotfile into a repo and symlink it back
   link [name]              Re-create symlinks only (skip pull and hooks)
@@ -1753,7 +2261,7 @@ Commands:
   unregister <name>        Remove a repo from the registry
   files [repo]             List all managed files, grouped by repo
   trace <path>             Show which repo a file or directory comes from
-  doctor                   Check registry, chain, hooks, and repo commands
+  doctor                   Check registry, chain, hooks, commands, and cleanups
   check                    Warn if repos haven't been fetched recently
   shell-init               Output shell wrapper for auto-reload after changes
   guard [path]             Install pre-commit hook to block sensitive content
@@ -1774,7 +2282,12 @@ Hook environment:
   DOTTY_ENV                Detected environment (empty if none)
   DOTTY_COMMAND            Command that invoked the hook (install or update)
   DOTTY_VERBOSE            "true" when -v/--verbose is set
+  DOTTY_DRY_RUN            "true" when -n/--dry-run is set
   DOTTY_LIB                Path to hook utility library (source "$DOTTY_LIB")
+
+Cleanup environment:
+  DOTTY_CLEANUP_ID         Cleanup task id
+  DOTTY_CLEANUP_STATE_DIR  Local state directory for the cleanup task
 
 Repo command environment:
   DOTTY_COMMAND            "run" while executing a repo-defined command
@@ -1782,6 +2295,7 @@ Repo command environment:
   DOTTY_RUN_REPO           Absolute path to the repo providing the command
   DOTTY_ENV                Detected environment (empty if none)
   DOTTY_VERBOSE            "true" when -v/--verbose is set
+  DOTTY_DRY_RUN            "true" when -n/--dry-run is set
   DOTTY_LIB                Path to command utility library (source "$DOTTY_LIB")
 
 Guard:
@@ -1871,6 +2385,7 @@ main() {
         update)       cmd_update "$@" ;;
         commands)     cmd_commands "$@" ;;
         run)          cmd_run "$@" ;;
+        cleanups)     cmd_cleanups "$@" ;;
         self-update)  cmd_self_update "$@" ;;
         add)          cmd_add "$@" ;;
         link)         cmd_link "$@" ;;
