@@ -39,6 +39,7 @@ _dotty() {
         'check:Warn if repos haven'\''t been fetched recently'
         'shell-init:Output shell wrapper for auto-reload after changes'
         'guard:Install pre-commit hook to block sensitive content'
+        'guard-check:Check staged or worktree content for guard patterns'
         'unguard:Remove the dotty pre-commit hook'
         'help:Show help'
         'version:Show version'
@@ -94,6 +95,14 @@ _dotty() {
             ;;
         guard|unguard)
             _files -/
+            ;;
+        guard-check)
+            _arguments \
+                '--staged[Check staged changes]' \
+                '--worktree[Check tracked worktree files]' \
+                '--patterns-file[Load patterns from file]:pattern file:_files' \
+                '--exclude[Exclude pathspec]:path:_files' \
+                '*:path:_files'
             ;;
         commands|self-update|shell-init|doctor|check)
             ;;

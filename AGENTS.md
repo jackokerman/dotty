@@ -10,7 +10,7 @@
 - `dotty` is the main bash entry point. It contains logging, registry, chain resolution, environment detection, symlinking, command handlers, and main dispatch.
 - `install.sh` bootstraps dotty itself.
 - `lib/utils.sh` contains shared shell helpers used by hooks and related tooling.
-- `hooks/pre-commit` is the standalone guard hook installed by `dotty guard`; it reads newline-separated `DOTTY_GUARD_PATTERNS` at commit time.
+- `hooks/pre-commit` is the guard hook template installed by `dotty guard`; it delegates to `dotty guard-check` at commit time.
 - `completions/_dotty` contains zsh completions.
 - `.github/ISSUE_TEMPLATE/` contains the GitHub issue forms for bug reports and feature requests.
 - `examples/` contains contributor-facing sample dotfiles layouts referenced from the docs and issue forms.

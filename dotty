@@ -1744,6 +1744,226 @@ _resolve_script_dir() {
     (cd "$(dirname "$script")" && pwd)
 }
 
+_guard_check_usage() {
+    cat <<'EOF'
+Usage: dotty guard-check [--staged|--worktree] [--patterns-file PATH] [--exclude PATH] [PATH...]
+
+Blocks added public-repo lines that match configured sensitive-content patterns.
+
+Pattern sources:
+  - repo .githooks/sensitive-content-patterns when present
+  - $XDG_CONFIG_HOME/public-content-guard/patterns when present
+  - colon-separated $PUBLIC_CONTENT_GUARD_PATTERN_FILE paths
+  - newline-separated $PUBLIC_CONTENT_GUARD_PATTERNS entries
+
+Set PUBLIC_CONTENT_GUARD_SKIP=1 to disable the guard.
+EOF
+}
+
+_guard_check_trim() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
+_GUARD_CHECK_PATTERNS=()
+
+_guard_check_append_pattern() {
+    local pattern
+    pattern="$(_guard_check_trim "$1")"
+    [[ -z "$pattern" || "$pattern" == \#* ]] && return
+    _GUARD_CHECK_PATTERNS+=("$pattern")
+}
+
+_guard_check_load_patterns_file() {
+    local path="$1"
+    local line
+
+    [[ -f "$path" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        _guard_check_append_pattern "$line"
+    done < "$path"
+}
+
+_guard_check_combined_patterns() {
+    local pattern
+    local combined=""
+
+    for pattern in "${_GUARD_CHECK_PATTERNS[@]+"${_GUARD_CHECK_PATTERNS[@]}"}"; do
+        [[ -n "$combined" ]] && combined+="|"
+        combined+="$pattern"
+    done
+
+    printf '%s' "$combined"
+}
+
+_guard_check_repo_root() {
+    git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
+cmd_guard_check() {
+    local mode="staged"
+    local -a paths=()
+    local -a excludes=()
+    local -a pattern_files=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --staged)
+                mode="staged"
+                ;;
+            --worktree)
+                mode="worktree"
+                ;;
+            --patterns-file)
+                [[ $# -ge 2 ]] || die "--patterns-file requires a path"
+                pattern_files+=("$2")
+                shift
+                ;;
+            --exclude)
+                [[ $# -ge 2 ]] || die "--exclude requires a path"
+                excludes+=("$2")
+                shift
+                ;;
+            -h|--help)
+                _guard_check_usage
+                return 0
+                ;;
+            --)
+                shift
+                while [[ $# -gt 0 ]]; do
+                    paths+=("$1")
+                    shift
+                done
+                break
+                ;;
+            -*)
+                die "unknown argument: $1"
+                ;;
+            *)
+                paths+=("$1")
+                ;;
+        esac
+        shift
+    done
+
+    [[ "${PUBLIC_CONTENT_GUARD_SKIP:-0}" == "1" ]] && return 0
+
+    local repo_root
+    repo_root="$(_guard_check_repo_root)"
+
+    local default_repo_patterns="$repo_root/.githooks/sensitive-content-patterns"
+    local default_user_patterns="${XDG_CONFIG_HOME:-$HOME/.config}/public-content-guard/patterns"
+
+    _GUARD_CHECK_PATTERNS=()
+    pattern_files=("$default_repo_patterns" "$default_user_patterns" "${pattern_files[@]+"${pattern_files[@]}"}")
+
+    if [[ -n "${PUBLIC_CONTENT_GUARD_PATTERN_FILE:-}" ]]; then
+        local -a env_pattern_files=()
+        IFS=':' read -r -a env_pattern_files <<< "$PUBLIC_CONTENT_GUARD_PATTERN_FILE"
+        pattern_files+=("${env_pattern_files[@]}")
+    fi
+
+    local pattern_file
+    for pattern_file in "${pattern_files[@]+"${pattern_files[@]}"}"; do
+        _guard_check_load_patterns_file "$pattern_file"
+    done
+
+    if [[ -n "${PUBLIC_CONTENT_GUARD_PATTERNS:-}" ]]; then
+        local pattern
+        while IFS= read -r pattern || [[ -n "$pattern" ]]; do
+            _guard_check_append_pattern "$pattern"
+        done <<< "$PUBLIC_CONTENT_GUARD_PATTERNS"
+    fi
+
+    local combined
+    combined="$(_guard_check_combined_patterns)"
+    [[ -n "$combined" ]] || return 0
+
+    local -a git_paths=()
+    if [[ ${#paths[@]} -gt 0 ]]; then
+        git_paths+=("--" "${paths[@]}")
+    else
+        git_paths+=("--" ".")
+    fi
+
+    local excluded
+    for excluded in "${excludes[@]+"${excludes[@]}"}"; do
+        git_paths+=(":(exclude)$excluded")
+    done
+
+    local matches=""
+
+    case "$mode" in
+        staged)
+            local staged_files
+            staged_files="$(git -C "$repo_root" diff --cached --name-only --diff-filter=ACMR "${git_paths[@]}")"
+            [[ -n "$staged_files" ]] || return 0
+
+            local file
+            while IFS= read -r file; do
+                [[ -n "$file" ]] || continue
+
+                local file_matches
+                file_matches="$(git -C "$repo_root" diff --cached --unified=0 --no-color -- "$file" | grep -iE "^\+[^+].*($combined)" || true)"
+                [[ -n "$file_matches" ]] || continue
+
+                local line
+                while IFS= read -r line; do
+                    [[ -n "$line" ]] || continue
+                    matches+="$file: $line"$'\n'
+                done <<< "$file_matches"
+            done <<< "$staged_files"
+            ;;
+        worktree)
+            local tracked_files
+            tracked_files="$(git -C "$repo_root" ls-files "${git_paths[@]}")"
+            [[ -n "$tracked_files" ]] || return 0
+
+            local file
+            while IFS= read -r file; do
+                [[ -n "$file" && -f "$repo_root/$file" ]] || continue
+
+                local file_matches
+                file_matches="$(grep -iEn "$combined" "$repo_root/$file" || true)"
+                [[ -n "$file_matches" ]] || continue
+
+                local line
+                while IFS= read -r line; do
+                    [[ -n "$line" ]] || continue
+                    matches+="$file: $line"$'\n'
+                done <<< "$file_matches"
+            done <<< "$tracked_files"
+            ;;
+        *)
+            die "unknown mode: $mode"
+            ;;
+    esac
+
+    if [[ -n "$matches" ]]; then
+        printf '\n'
+        printf '  Commit blocked. Added lines contain content this public repo should not mention.\n'
+        printf '\n'
+        printf '  Matches found:\n'
+        printf '\n'
+        printf '%s' "$matches" | head -20 | while IFS= read -r line; do
+            printf '    %s\n' "$line"
+        done
+
+        local local_count
+        local_count="$(printf '%s' "$matches" | wc -l | tr -d ' ')"
+        if [[ "$local_count" -gt 20 ]]; then
+            printf '    ... and %s more\n' "$((local_count - 20))"
+        fi
+
+        printf '\n'
+        printf '  Remove or reword the added text, or bypass the guard if this is intentional.\n'
+        printf '\n'
+        return 1
+    fi
+}
+
 _guard_hook_path() {
     local script_dir
     script_dir="$(_resolve_script_dir)"
@@ -1760,18 +1980,53 @@ _guard_is_ours() {
     [[ -f "$hook" ]] && grep -q "dotty guard" "$hook" 2>/dev/null
 }
 
+_guard_dotty_command() {
+    local command_path="$0"
+    if [[ "$command_path" == */* ]]; then
+        local command_dir
+        command_dir="$(cd "$(dirname "$command_path")" && pwd)"
+        printf '%s/%s\n' "$command_dir" "$(basename "$command_path")"
+    else
+        command -v "$command_path"
+    fi
+}
+
+_guard_sed_replacement() {
+    printf '%s' "$1" | sed 's/[\\\/&]/\\&/g'
+}
+
+_install_guard_hook() {
+    local hook_src="$1"
+    local hook_dest="$2"
+    local dotty_command
+    local dotty_literal
+    local dotty_replacement
+
+    dotty_command="$(_guard_dotty_command)"
+    printf -v dotty_literal '%q' "$dotty_command"
+    dotty_replacement="$(_guard_sed_replacement "$dotty_literal")"
+
+    sed "s/__DOTTY_COMMAND_LITERAL__/$dotty_replacement/g" "$hook_src" > "$hook_dest"
+    chmod +x "$hook_dest"
+}
+
 _guard_pattern_hint() {
-    if [[ -n "${DOTTY_GUARD_PATTERNS:-}" ]]; then
+    if [[ -n "${PUBLIC_CONTENT_GUARD_PATTERNS:-}" ]]; then
         local count=0
         while IFS= read -r line; do
             line="${line## }"
             line="${line%% }"
             [[ -z "$line" || "$line" == \#* ]] && continue
             count=$((count + 1))
-        done <<< "$DOTTY_GUARD_PATTERNS"
-        info "DOTTY_GUARD_PATTERNS has $count pattern(s) configured."
+        done <<< "$PUBLIC_CONTENT_GUARD_PATTERNS"
+        info "PUBLIC_CONTENT_GUARD_PATTERNS has $count pattern(s) configured."
     else
-        warning "DOTTY_GUARD_PATTERNS is not set. The hook will be a no-op until you export it."
+        local user_patterns="${XDG_CONFIG_HOME:-$HOME/.config}/public-content-guard/patterns"
+        if [[ -f "$user_patterns" || -n "${PUBLIC_CONTENT_GUARD_PATTERN_FILE:-}" ]]; then
+            info "Public content guard pattern file configuration is available."
+        else
+            warning "No public content guard patterns are configured yet."
+        fi
     fi
 }
 
@@ -1789,8 +2044,7 @@ cmd_guard() {
     if [[ -f "$hook_dest" ]]; then
         if _guard_is_ours "$hook_dest"; then
             # Always re-copy to pick up hook updates.
-            cp "$hook_src" "$hook_dest"
-            chmod +x "$hook_dest"
+            _install_guard_hook "$hook_src" "$hook_dest"
             success "Guard hook updated in $target"
             _guard_pattern_hint
             return 0
@@ -1803,8 +2057,7 @@ cmd_guard() {
     fi
 
     mkdir -p "$target/.git/hooks"
-    cp "$hook_src" "$hook_dest"
-    chmod +x "$hook_dest"
+    _install_guard_hook "$hook_src" "$hook_dest"
 
     success "Guard hook installed in $target"
     _guard_pattern_hint
@@ -2265,6 +2518,7 @@ Commands:
   check                    Warn if repos haven't been fetched recently
   shell-init               Output shell wrapper for auto-reload after changes
   guard [path]             Install pre-commit hook to block sensitive content
+  guard-check [args]       Check staged or worktree content for guard patterns
   unguard [path]           Remove the dotty pre-commit hook
   help                     Show this help
   version                  Show version
@@ -2299,7 +2553,12 @@ Repo command environment:
   DOTTY_LIB                Path to command utility library (source "$DOTTY_LIB")
 
 Guard:
-  DOTTY_GUARD_PATTERNS     Newline-separated patterns to block in commits
+  PUBLIC_CONTENT_GUARD_PATTERNS
+                           Newline-separated patterns to block in commits
+  PUBLIC_CONTENT_GUARD_PATTERN_FILE
+                           Colon-separated pattern files to load
+  PUBLIC_CONTENT_GUARD_SKIP=1
+                           Disable guard checks
 
 General:
   DOTTY_DIR                Base directory for dotty state (default: ~/.dotty)
@@ -2399,6 +2658,7 @@ main() {
         check)        cmd_check "$@" ;;
         shell-init)   cmd_shell_init "$@" ;;
         guard)        cmd_guard "$@" ;;
+        guard-check)  cmd_guard_check "$@" ;;
         unguard)      cmd_unguard "$@" ;;
         help|--help)  cmd_help ;;
         version|--version) cmd_version ;;
