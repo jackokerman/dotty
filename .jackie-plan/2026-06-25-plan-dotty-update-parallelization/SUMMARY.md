@@ -1,9 +1,9 @@
 ---
 id: 2026-06-25-plan-dotty-update-parallelization
 title: Plan dotty update parallelization
-state: active
+state: ready-to-implement
 createdAt: 2026-06-25T17:07:01.451Z
-updatedAt: 2026-06-25T17:07:35.386Z
+updatedAt: 2026-06-25T17:21:44.541Z
 ---
 
-Created a planning-only Jackie Plan for speeding up `dotty update` safely. Current recommendation is to parallelize repo pulls first while keeping self-update, chain resolution, linking, cleanups, hooks, reload marker handling, and summaries serial. The plan captures design questions around `DOTTY_UPDATE_JOBS`, default concurrency, deterministic output replay, failure semantics, stashed worktrees, and parent-shell change tracking from parallel jobs. Do not implement until those questions are settled and the plan is marked ready-to-implement.
+Design pass completed. The selected first implementation is opt-in parallel git pulls for full-chain `dotty update` via `DOTTY_UPDATE_JOBS`, defaulting to `1` so current behavior remains serial unless explicitly enabled. Scope excludes install, self-update, dry-run, targeted `dotty update <repo>`, linking, orphan cleanup, one-shot cleanups, and hooks. Implementation should split `run_chain` only at the pull boundary, run eligible pulls before serial `process_repo`, capture per-repo logs/results in temp files, replay logs in chain order, propagate any changed repo back to `_DOTTY_CHANGES_MADE`, and preserve current warning-and-continue pull failure semantics. Bash 3.2 portability matters; avoid `wait -n`, and a simple batch scheduler is acceptable. The canonical plan includes a minimal-context implementation prompt.
