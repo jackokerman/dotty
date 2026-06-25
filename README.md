@@ -713,6 +713,7 @@ Each test gets a fully isolated environment with a temporary `$HOME`, registry, 
 - `chain.bats` — chain resolution, cycle detection, environment detection
 - `dry_run.bats` — dry-run mode
 - `install.bats` — installer behavior for existing `~/.dotty` state
+- `operation_lock.bats` — mutating command serialization and stale lock cleanup
 - `update_parallel.bats` — opt-in parallel update pull scheduling
 - `trace.bats` — symlink provenance tracing
 - `files.bats` — file listing and status

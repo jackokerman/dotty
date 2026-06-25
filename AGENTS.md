@@ -24,12 +24,13 @@
 - Managed repo discovery and compatibility live in the config, hook lookup, and repo-command lookup helpers; keep `.dotty/config`, optional `.dotty/run.sh`, optional `.dotty/commands/`, and migration behavior aligned with the tests and README.
 - `home/` is symlinked into `$HOME`; `$ENV/home/` overlays are applied when an environment is detected.
 - `dotty install` resolves the chain, registers repos, links files, applies overlays, and runs hooks.
+- Mutating Dotty operations take a per-machine lock under `~/.dotty/operation.lock`; keep `install`, `update`, `link`, `uninstall`, and `self-update` serialization aligned with `test/operation_lock.bats`.
 - Pending one-shot cleanups run after linking and before hooks, with local completion state under `~/.dotty/cleanups/`.
 - `dotty link` refreshes symlinks only. It does not pull repos or run hooks.
 - `dotty run` resolves repo-defined commands from the active chain and executes them from the defining repo root.
 - Directory conflicts are merged by exploding directory symlinks into real directories with child symlinks rather than replacing the whole directory.
 - Hook environment variables are `DOTTY_REPO_DIR`, `DOTTY_ENV`, and `DOTTY_COMMAND`.
-- Runtime state lives under `~/.dotty/`, especially `registry`, `repos/`, `backups/`, `bin/dotty`, and `.needs-reload`.
+- Runtime state lives under `~/.dotty/`, especially `registry`, `repos/`, `backups/`, `bin/dotty`, `.needs-reload`, and `operation.lock`.
 
 ## Bash Expectations
 
