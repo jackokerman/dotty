@@ -289,6 +289,8 @@ DOTTY_UPDATE_JOBS=4 dotty update  # pull full-chain repos in parallel batches
 
 `DOTTY_UPDATE_JOBS` defaults to `1`, preserving serial pull behavior. Values greater than `1` apply only to full-chain `dotty update`; linking, cleanup tasks, hooks, `install`, dry-run, self-update, and `dotty update <name>` still run serially.
 
+Dotty also takes a per-machine operation lock for commands that mutate shared Dotty or home-directory state: `install`, `update`, `link`, `uninstall`, and `self-update`. If another locked operation is already running, the next one waits and prints the current lock owner. Read-only commands and repo-defined `dotty run` commands are not serialized.
+
 ### `dotty commands`
 
 Lists repo-defined commands discovered from `.dotty/commands/` across the active chain after overlay resolution. Later repos override earlier repos when they define the same command name.

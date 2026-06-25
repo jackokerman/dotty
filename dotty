@@ -13,6 +13,7 @@ DOTTY_CLEANUPS_DIR="$DOTTY_DIR/cleanups"
 DOTTY_VERBOSE="${DOTTY_VERBOSE:-false}"
 DOTTY_DRY_RUN="${DOTTY_DRY_RUN:-false}"
 _DOTTY_CHANGES_MADE=false
+_DOTTY_OPERATION_LOCK_DIR=""
 
 # shellcheck source=lib/utils.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib/utils.sh"
@@ -55,6 +56,125 @@ registry_remove() {
 
 registry_names() {
     cut -d= -f1 "$DOTTY_REGISTRY" 2>/dev/null
+}
+
+# Operation lock
+
+_current_pid() {
+    printf '%s\n' "${BASHPID:-$$}"
+}
+
+_dotty_operation_lock_dir() {
+    printf '%s\n' "$DOTTY_DIR/operation.lock"
+}
+
+_read_lock_file() {
+    local path="$1"
+    [[ -f "$path" ]] || return 1
+    sed -n '1p' "$path" 2>/dev/null || true
+}
+
+_operation_lock_description() {
+    local lock_dir="$1"
+    local command_name=""
+    local lock_pid=""
+    local started_at=""
+    local host=""
+    local description=""
+
+    command_name="$(_read_lock_file "$lock_dir/command" || true)"
+    lock_pid="$(_read_lock_file "$lock_dir/pid" || true)"
+    started_at="$(_read_lock_file "$lock_dir/started-at" || true)"
+    host="$(_read_lock_file "$lock_dir/host" || true)"
+
+    if [[ -n "$command_name" ]]; then
+        description+="dotty $command_name"
+    else
+        description+="dotty operation"
+    fi
+
+    [[ -n "$lock_pid" ]] && description+=" pid $lock_pid"
+    [[ -n "$host" ]] && description+=" on $host"
+    [[ -n "$started_at" ]] && description+=" since $started_at"
+
+    printf '%s\n' "$description"
+}
+
+_operation_lock_active() {
+    local lock_dir="$1"
+    local lock_pid=""
+
+    [[ -d "$lock_dir" ]] || return 1
+
+    lock_pid="$(_read_lock_file "$lock_dir/pid" || true)"
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        return 0
+    fi
+
+    warning "Removing stale dotty operation lock at $lock_dir"
+    rm -rf "$lock_dir"
+    return 1
+}
+
+_acquire_operation_lock() {
+    local command_name="$1"
+    local lock_dir=""
+    local next_notice=0
+    local now=0
+
+    mkdir -p "$DOTTY_DIR"
+    lock_dir="$(_dotty_operation_lock_dir)"
+
+    while ! mkdir "$lock_dir" 2>/dev/null; do
+        if ! _operation_lock_active "$lock_dir"; then
+            continue
+        fi
+
+        now="$(date +%s)"
+        if [[ "$now" -ge "$next_notice" ]]; then
+            warning "Waiting for $(_operation_lock_description "$lock_dir")"
+            next_notice=$((now + 10))
+        fi
+
+        sleep 1
+    done
+
+    _DOTTY_OPERATION_LOCK_DIR="$lock_dir"
+    printf '%s\n' "$(_current_pid)" > "$lock_dir/pid"
+    printf '%s\n' "$command_name" > "$lock_dir/command"
+    date -u '+%Y-%m-%dT%H:%M:%SZ' > "$lock_dir/started-at"
+    hostname > "$lock_dir/host" 2>/dev/null || true
+}
+
+_release_operation_lock() {
+    local lock_dir="${_DOTTY_OPERATION_LOCK_DIR:-}"
+    local lock_pid=""
+
+    [[ -n "$lock_dir" && -d "$lock_dir" ]] || return 0
+
+    lock_pid="$(_read_lock_file "$lock_dir/pid" || true)"
+    if [[ -z "$lock_pid" || "$lock_pid" == "$(_current_pid)" ]]; then
+        rm -rf "$lock_dir"
+    fi
+
+    _DOTTY_OPERATION_LOCK_DIR=""
+}
+
+_run_with_operation_lock() {
+    local command_name="$1"
+    shift
+
+    local status=0
+
+    _acquire_operation_lock "$command_name"
+    trap _release_operation_lock EXIT
+
+    "$@" || status=$?
+
+    _release_operation_lock
+    trap - EXIT
+
+    return "$status"
 }
 
 # Config reading
@@ -2661,6 +2781,12 @@ Guard:
 General:
   DOTTY_DIR                Base directory for dotty state (default: ~/.dotty)
   DOTTY_UPDATE_JOBS        Parallel git pulls for full-chain update (default: 1)
+
+Serialization:
+  install, update, link, uninstall, and self-update take a per-machine lock
+  under DOTTY_DIR so overlapping runs wait instead of mutating shared state at
+  the same time. Read-only commands and repo-defined dotty run commands are not
+  serialized.
 EOF
 }
 
@@ -2739,15 +2865,15 @@ main() {
     shift || true
 
     case "$cmd" in
-        install)      cmd_install "$@" ;;
-        update)       cmd_update "$@" ;;
+        install)      _run_with_operation_lock "$cmd" cmd_install "$@" ;;
+        update)       _run_with_operation_lock "$cmd" cmd_update "$@" ;;
         commands)     cmd_commands "$@" ;;
         run)          cmd_run "$@" ;;
         cleanups)     cmd_cleanups "$@" ;;
-        self-update)  cmd_self_update "$@" ;;
+        self-update)  _run_with_operation_lock "$cmd" cmd_self_update "$@" ;;
         add)          cmd_add "$@" ;;
-        link)         cmd_link "$@" ;;
-        uninstall)    cmd_uninstall "$@" ;;
+        link)         _run_with_operation_lock "$cmd" cmd_link "$@" ;;
+        uninstall)    _run_with_operation_lock "$cmd" cmd_uninstall "$@" ;;
         status)       cmd_status "$@" ;;
         register)     cmd_register "$@" ;;
         unregister)   cmd_unregister "$@" ;;
