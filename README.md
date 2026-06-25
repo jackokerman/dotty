@@ -69,6 +69,15 @@ That is the main value prop. You keep clean ownership boundaries between repos, 
 
 The same example now lives as real files under `examples/personal-dotfiles/` and `examples/work-dotfiles/` if you want a concrete starting point or a minimal repro shape.
 
+To try that layered setup after installing dotty, run:
+
+```bash
+git clone https://github.com/jackokerman/dotty.git
+dotty install ./dotty/examples/work-dotfiles
+dotty status
+dotty trace ~/.config/git
+```
+
 ## How dotty compares
 
 `chezmoi` and `yadm` are stronger if you want templating, secrets handling, or a more feature-rich ecosystem around a single source repo. `Stow` and `Dotbot` are great if one repo plus symlinks is enough.

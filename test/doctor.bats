@@ -45,6 +45,32 @@ EOF
     [[ "$output" == *"dotty doctor found 0 failures, 0 warning(s)"* ]]
 }
 
+@test "cmd_doctor resolves relative DOTTY_EXTENDS from the declaring repo" {
+    local examples_root="$TEST_HOME/examples"
+    local base_dir="$examples_root/personal-dotfiles"
+    local overlay_dir="$examples_root/work-dotfiles"
+
+    mkdir -p "$base_dir/.dotty" "$base_dir/home" "$overlay_dir/.dotty" "$overlay_dir/home"
+    git -C "$base_dir" init -q
+    git -C "$overlay_dir" init -q
+
+    cat > "$base_dir/.dotty/config" <<'EOF'
+DOTTY_NAME="personal-dotfiles"
+DOTTY_EXTENDS=()
+EOF
+    cat > "$overlay_dir/.dotty/config" <<'EOF'
+DOTTY_NAME="work-dotfiles"
+DOTTY_EXTENDS=("../personal-dotfiles")
+EOF
+
+    register_test_repo "personal-dotfiles" "$base_dir"
+    register_test_repo "work-dotfiles" "$overlay_dir"
+
+    run cmd_doctor
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"work-dotfiles: chain resolves (personal-dotfiles → work-dotfiles)"* ]]
+}
+
 @test "cmd_doctor fails on a missing registered path" {
     echo "dotfiles=$TEST_HOME/missing-repo" >> "$TEST_REGISTRY"
 

@@ -65,6 +65,34 @@ EOF
     [[ -z "$output" ]]
 }
 
+@test "install.sh supports installing the shipped layered examples" {
+    local source_repo="$TEST_HOME/source-repo"
+    git clone -q "$DOTTY_ROOT" "$source_repo"
+    cp "$DOTTY_ROOT/dotty" "$source_repo/dotty"
+    rm -rf "$source_repo/examples"
+    cp -R "$DOTTY_ROOT/examples" "$source_repo/examples"
+    git -C "$source_repo" add dotty examples
+    git -C "$source_repo" \
+        -c user.name=Test \
+        -c user.email=test@example.com \
+        commit -q -m "sync current example fixture" || true
+
+    run env HOME="$TEST_HOME" DOTTY_DIR="$DOTTY_DIR" DOTTY_REPO="$source_repo" SHELL=/bin/zsh bash "$DOTTY_ROOT/install.sh"
+    [[ "$status" -eq 0 ]]
+
+    run "$DOTTY_DIR/bin/dotty" install "$source_repo/examples/work-dotfiles"
+    [[ "$status" -eq 0 ]]
+    [[ -L "$TEST_HOME/.gitconfig" ]]
+    [[ -L "$TEST_HOME/.gitconfig.local" ]]
+    [[ -L "$TEST_HOME/.config/git/config" ]]
+    [[ -L "$TEST_HOME/.config/git/ignore" ]]
+
+    run "$DOTTY_DIR/bin/dotty" trace "$TEST_HOME/.config/git"
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"personal-dotfiles"* ]]
+    [[ "$output" == *"work-dotfiles"* ]]
+}
+
 @test "install.sh configures bash startup when SHELL is bash" {
     local source_repo="$TEST_HOME/source-repo"
     make_installer_source_repo "$source_repo"

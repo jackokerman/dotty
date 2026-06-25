@@ -44,6 +44,33 @@ teardown() {
     [[ "${CHAIN_NAMES[1]}" == "overlay" ]]
 }
 
+@test "resolve_chain resolves relative DOTTY_EXTENDS from the declaring repo" {
+    local examples_root="$TEST_HOME/examples"
+    local base_dir="$examples_root/personal-dotfiles"
+    local overlay_dir="$examples_root/work-dotfiles"
+
+    mkdir -p "$base_dir/.dotty" "$base_dir/home" "$overlay_dir/.dotty" "$overlay_dir/home"
+    cat > "$base_dir/.dotty/config" <<'EOF'
+DOTTY_NAME="personal-dotfiles"
+DOTTY_EXTENDS=()
+EOF
+    cat > "$overlay_dir/.dotty/config" <<'EOF'
+DOTTY_NAME="work-dotfiles"
+DOTTY_EXTENDS=("../personal-dotfiles")
+EOF
+
+    CHAIN_NAMES=()
+    CHAIN_PATHS=()
+    _RESOLVING=()
+    resolve_chain "$overlay_dir"
+
+    [[ ${#CHAIN_NAMES[@]} -eq 2 ]]
+    [[ "${CHAIN_NAMES[0]}" == "personal-dotfiles" ]]
+    [[ "${CHAIN_NAMES[1]}" == "work-dotfiles" ]]
+    [[ "${CHAIN_PATHS[0]}" == "$base_dir" ]]
+    [[ "${CHAIN_PATHS[1]}" == "$overlay_dir" ]]
+}
+
 @test "resolve_chain detects cycles" {
     # Create two repos that reference each other
     create_test_repo "repo-a"

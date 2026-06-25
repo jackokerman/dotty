@@ -41,8 +41,10 @@ teardown() {
 @test "operation lock waits for an active lock owner" {
     local lock_dir="$TEST_DOTTY_DIR/operation.lock"
     local output_file="$TEST_HOME/wait.log"
+    sleep 5 &
+    local owner_pid="$!"
     mkdir -p "$lock_dir"
-    printf '%s\n' "$(_current_pid)" > "$lock_dir/pid"
+    printf '%s\n' "$owner_pid" > "$lock_dir/pid"
     printf 'update\n' > "$lock_dir/command"
     printf '2026-06-25T00:00:00Z\n' > "$lock_dir/started-at"
     printf 'test-host\n' > "$lock_dir/host"
@@ -59,4 +61,7 @@ teardown() {
 
     wait "$waiter_pid"
     [[ "$(cat "$output_file")" == *"Waiting for dotty update pid"* ]]
+
+    kill "$owner_pid" 2>/dev/null || true
+    wait "$owner_pid" 2>/dev/null || true
 }

@@ -1,2 +1,2 @@
 DOTTY_NAME="work-dotfiles"
-DOTTY_EXTENDS=("https://github.com/you/personal-dotfiles.git")
+DOTTY_EXTENDS=("../personal-dotfiles")

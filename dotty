@@ -324,6 +324,33 @@ CHAIN_NAMES=()
 CHAIN_PATHS=()
 _RESOLVING=()
 
+_is_relative_path_source() {
+    local source="$1"
+
+    case "$source" in
+        /*|*://*|*:*)
+            return 1
+            ;;
+        .|./*|../*|*/*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+_resolve_repo_source() {
+    local repo_dir="$1"
+    local source="$2"
+
+    if _is_relative_path_source "$source"; then
+        printf '%s\n' "$repo_dir/$source"
+    else
+        printf '%s\n' "$source"
+    fi
+}
+
 resolve_chain() {
     local repo_dir
     repo_dir="$(cd "$1" && pwd)"
@@ -346,7 +373,7 @@ resolve_chain() {
     local parent_url
     for parent_url in ${DOTTY_EXTENDS[@]+"${DOTTY_EXTENDS[@]}"}; do
         local parent_dir
-        parent_dir="$(ensure_repo "$parent_url")"
+        parent_dir="$(ensure_repo "$(_resolve_repo_source "$repo_dir" "$parent_url")")"
         resolve_chain "$parent_dir"
     done
 
@@ -1106,7 +1133,7 @@ _doctor_resolve_chain_no_clone() {
     local parent_source
     for parent_source in ${DOTTY_EXTENDS[@]+"${DOTTY_EXTENDS[@]}"}; do
         local parent_dir
-        parent_dir="$(_doctor_lookup_source "$parent_source")" || {
+        parent_dir="$(_doctor_lookup_source "$(_resolve_repo_source "$repo_dir" "$parent_source")")" || {
             _DOCTOR_ERROR="$name depends on $parent_source, but it is not installed or registered"
             return 1
         }
