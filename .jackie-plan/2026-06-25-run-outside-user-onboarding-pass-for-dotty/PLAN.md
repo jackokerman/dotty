@@ -1,9 +1,9 @@
 ---
 id: 2026-06-25-run-outside-user-onboarding-pass-for-dotty
 title: Run outside-user onboarding pass for dotty
-state: ready-to-implement
+state: complete
 createdAt: 2026-06-25T00:39:16.997Z
-updatedAt: 2026-06-25T00:39:22.020Z
+updatedAt: 2026-06-25T20:13:12.069Z
 ---
 
 # Run outside-user onboarding pass for dotty
