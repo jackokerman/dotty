@@ -1,25 +1,23 @@
 ---
 id: 2026-06-25-tighten-dotty-public-content-guard-convergence
 title: Tighten Dotty public-content guard convergence
-state: inbox
+state: complete
 createdAt: 2026-06-25T23:00:54.024Z
-updatedAt: 2026-06-25T23:00:54.024Z
+updatedAt: 2026-06-26T00:47:36.599Z
 ---
 
 # Tighten Dotty public-content guard convergence
 
 ## Plan
 
-# Tighten Dotty public-content guard convergence
+Audit and tighten Dotty's public-content guard guidance so the documented setup converges on one steady-state model: install `dotty guard` per public repo, and keep reusable sensitive-content patterns in the machine-wide public-content guard file.
 
-Audit the remaining Dotty-side guard surfaces so repos can converge on one setup model: machine-wide public-content patterns plus `dotty guard` installed per repo.
+Implementation scope:
+- Make README setup lead with `$XDG_CONFIG_HOME/public-content-guard/patterns` and `dotty guard`, not inline `PUBLIC_CONTENT_GUARD_PATTERNS`.
+- Keep repo-local `.githooks/sensitive-content-patterns`, `--patterns-file`, `PUBLIC_CONTENT_GUARD_PATTERN_FILE`, and `PUBLIC_CONTENT_GUARD_PATTERNS` as supported escape hatches for repo-specific, one-off, and test/CI use.
+- Align the guard help text and focused tests with that model so the fixture named as a shared source actually uses the shared machine-wide pattern file.
+- Check the local Dotty chain and nearby opted-in repos for remaining inline pattern usage, and capture any out-of-scope repo cleanup separately.
 
-Scope:
-- Review Dotty docs, examples, and tests that still present `PUBLIC_CONTENT_GUARD_PATTERNS` as a normal first-choice setup path.
-- Decide whether env-var patterns should remain only as an escape hatch/test harness mechanism rather than a documented primary workflow.
-- Check a small sample of repos that already opt into `dotty guard-check` to see whether any still inline patterns instead of relying on the shared machine-wide file and repo hook install.
-- If cleanup is needed, update Dotty docs/steering and capture any per-repo follow-ups separately.
-
-Why now:
-- `jackie-plan` needed cleanup after a public-repo doc briefly linked an internal host and the repo was only partially converged on the shared guard workflow.
-- The desired steady state is one shared source of truth for patterns, not per-repo inline fallbacks.
+Verification:
+- Run the focused guard bats test.
+- Run a short docs/help text search for public-content guard references.

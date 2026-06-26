@@ -1999,9 +1999,11 @@ Usage: dotty guard-check [--staged|--worktree] [--patterns-file PATH] [--exclude
 
 Blocks added public-repo lines that match configured sensitive-content patterns.
 
-Pattern sources:
+Default pattern sources:
   - repo .githooks/sensitive-content-patterns when present
   - $XDG_CONFIG_HOME/public-content-guard/patterns when present
+
+Override pattern sources:
   - colon-separated $PUBLIC_CONTENT_GUARD_PATTERN_FILE paths
   - newline-separated $PUBLIC_CONTENT_GUARD_PATTERNS entries
 
@@ -2803,9 +2805,9 @@ Repo command environment:
 
 Guard:
   PUBLIC_CONTENT_GUARD_PATTERNS
-                           Newline-separated patterns to block in commits
+                           Temporary newline-separated patterns to block in commits
   PUBLIC_CONTENT_GUARD_PATTERN_FILE
-                           Colon-separated pattern files to load
+                           Extra colon-separated pattern files to load
   PUBLIC_CONTENT_GUARD_SKIP=1
                            Disable guard checks
 

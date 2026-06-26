@@ -32,7 +32,7 @@ run_guard_check() {
     cmd_guard_check "$@"
 }
 
-@test "guard-check blocks staged added lines from shared env patterns" {
+@test "guard-check blocks staged added lines from temporary env patterns" {
     local repo="$TEST_HOME/repo"
     make_git_repo "$repo"
 
@@ -50,7 +50,7 @@ run_guard_check() {
     [[ "$status" -eq 0 ]]
 }
 
-@test "guard-check loads user repo and explicit pattern files" {
+@test "guard-check loads machine-wide repo and explicit pattern files" {
     local repo="$TEST_HOME/repo"
     local extra_patterns="$TEST_HOME/extra-patterns"
     local env_patterns="$TEST_HOME/env-patterns"
@@ -82,9 +82,12 @@ run_guard_check() {
     local repo_one="$TEST_HOME/repo-one"
     local repo_two="$TEST_HOME/repo-two"
     local repo_without_hook="$TEST_HOME/repo-without-hook"
+    export XDG_CONFIG_HOME="$TEST_HOME/config"
     make_git_repo "$repo_one"
     make_git_repo "$repo_two"
     make_git_repo "$repo_without_hook"
+    mkdir -p "$XDG_CONFIG_HOME/public-content-guard"
+    printf 'internaltool\n' > "$XDG_CONFIG_HOME/public-content-guard/patterns"
 
     run "$DOTTY_SCRIPT" guard "$repo_one"
     [[ "$status" -eq 0 ]]
@@ -97,18 +100,18 @@ run_guard_check() {
 
     printf 'This mentions internaltool.\n' >> "$repo_one/README.md"
     git -C "$repo_one" add README.md
-    run env PUBLIC_CONTENT_GUARD_PATTERNS="internaltool" git -C "$repo_one" commit -qm 'blocked'
+    run git -C "$repo_one" commit -qm 'blocked'
     [[ "$status" -ne 0 ]]
     [[ "$output" == *"Commit blocked"* ]]
 
     printf 'This mentions internaltool.\n' >> "$repo_two/README.md"
     git -C "$repo_two" add README.md
-    run env PUBLIC_CONTENT_GUARD_PATTERNS="internaltool" git -C "$repo_two" commit -qm 'blocked'
+    run git -C "$repo_two" commit -qm 'blocked'
     [[ "$status" -ne 0 ]]
     [[ "$output" == *"Commit blocked"* ]]
 
     printf 'This mentions internaltool.\n' >> "$repo_without_hook/README.md"
     git -C "$repo_without_hook" add README.md
-    run env PUBLIC_CONTENT_GUARD_PATTERNS="internaltool" git -C "$repo_without_hook" commit -qm 'allowed without hook'
+    run git -C "$repo_without_hook" commit -qm 'allowed without hook'
     [[ "$status" -eq 0 ]]
 }

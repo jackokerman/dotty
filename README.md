@@ -641,17 +641,17 @@ Dotty can install a pre-commit hook that blocks commits containing sensitive pat
 
 ### Setup
 
-First, define the patterns you want to block with one of the public content guard pattern sources. Each line is a regex pattern (case-insensitive). Blank lines and `#` comments are ignored.
+First, put the shared patterns you want to block in `$XDG_CONFIG_HOME/public-content-guard/patterns`. Each line is a regex pattern (case-insensitive). Blank lines and `#` comments are ignored.
 
 ```bash
-export PUBLIC_CONTENT_GUARD_PATTERNS="\
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/public-content-guard"
+cat > "${XDG_CONFIG_HOME:-$HOME/.config}/public-content-guard/patterns" <<'EOF'
 internaltool
 internal\.example
 # private docs
-docs\.internal"
+docs\.internal
+EOF
 ```
-
-You can also use `$XDG_CONFIG_HOME/public-content-guard/patterns`, repo-local `.githooks/sensitive-content-patterns`, or colon-separated files in `PUBLIC_CONTENT_GUARD_PATTERN_FILE`.
 
 Then install the hook into any git repo:
 
@@ -661,6 +661,8 @@ dotty guard ~/my-repo    # specific repo
 ```
 
 The hook runs `dotty guard-check --staged` at commit time and blocks the commit if any staged added lines match. If no patterns are configured, the hook is a no-op. Set `PUBLIC_CONTENT_GUARD_SKIP=1` to bypass the guard for an intentional commit.
+
+For escape hatches, you can add repo-specific patterns in `.githooks/sensitive-content-patterns`, pass one-off files with `--patterns-file`, add colon-separated files through `PUBLIC_CONTENT_GUARD_PATTERN_FILE`, or provide newline-separated temporary patterns with `PUBLIC_CONTENT_GUARD_PATTERNS`.
 
 ### `dotty guard [path]`
 
