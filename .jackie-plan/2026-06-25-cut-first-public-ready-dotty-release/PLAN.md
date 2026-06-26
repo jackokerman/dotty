@@ -1,9 +1,9 @@
 ---
 id: 2026-06-25-cut-first-public-ready-dotty-release
 title: Cut first public-ready dotty release
-state: ready-to-implement
+state: complete
 createdAt: 2026-06-25T00:39:16.965Z
-updatedAt: 2026-06-25T21:48:23.867Z
+updatedAt: 2026-06-26T00:33:13.933Z
 ---
 
 # Cut first public-ready dotty release

@@ -1,9 +1,9 @@
 ---
 id: 2026-06-25-cut-first-public-ready-dotty-release
 title: Cut first public-ready dotty release
-state: ready-to-implement
+state: complete
 createdAt: 2026-06-25T00:39:16.965Z
-updatedAt: 2026-06-25T21:48:23.867Z
+updatedAt: 2026-06-26T00:33:13.933Z
 ---
 
-Documented the missing release decision point in `RELEASING.md` and added a draft `docs/releases/v0.3.0.md` for the first public-ready release. The release notes now capture the current public baseline and explicitly record that the curl installer remains on `main` for the initial release.
+Completed the first public-ready release mechanics for dotty. Verified `main` was clean and matched `origin/main`, confirmed `dotty version` reports `0.3.0`, ran the full bats suite successfully, created and pushed annotated tag `v0.3.0` at `f67bc2f`, and published GitHub release notes that explicitly state the curl installer intentionally remains on `main` for this first release.
