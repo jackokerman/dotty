@@ -100,7 +100,6 @@ _dotty() {
             _arguments \
                 '--staged[Check staged changes]' \
                 '--worktree[Check tracked worktree files]' \
-                '--patterns-file[Load patterns from file]:pattern file:_files' \
                 '--exclude[Exclude pathspec]:path:_files' \
                 '*:path:_files'
             ;;

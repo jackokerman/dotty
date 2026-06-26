@@ -32,14 +32,17 @@ run_guard_check() {
     cmd_guard_check "$@"
 }
 
-@test "guard-check blocks staged added lines from temporary env patterns" {
+@test "guard-check blocks staged added lines from machine-wide patterns" {
     local repo="$TEST_HOME/repo"
     make_git_repo "$repo"
+
+    export XDG_CONFIG_HOME="$TEST_HOME/config"
+    mkdir -p "$XDG_CONFIG_HOME/public-content-guard"
+    printf 'internaltool\n' > "$XDG_CONFIG_HOME/public-content-guard/patterns"
 
     printf 'This mentions internaltool.\n' >> "$repo/README.md"
     git -C "$repo" add README.md
 
-    export PUBLIC_CONTENT_GUARD_PATTERNS="internaltool"
     run run_guard_check "$repo" --staged README.md
     [[ "$status" -eq 1 ]]
     [[ "$output" == *"Commit blocked"* ]]
@@ -50,32 +53,16 @@ run_guard_check() {
     [[ "$status" -eq 0 ]]
 }
 
-@test "guard-check loads machine-wide repo and explicit pattern files" {
+@test "guard-check is a no-op without machine-wide patterns" {
     local repo="$TEST_HOME/repo"
-    local extra_patterns="$TEST_HOME/extra-patterns"
-    local env_patterns="$TEST_HOME/env-patterns"
     make_git_repo "$repo"
 
     export XDG_CONFIG_HOME="$TEST_HOME/config"
-    mkdir -p "$XDG_CONFIG_HOME/public-content-guard" "$repo/.githooks"
-    printf 'usersecret\n' > "$XDG_CONFIG_HOME/public-content-guard/patterns"
-    printf 'reposecret\n' > "$repo/.githooks/sensitive-content-patterns"
-    printf 'extrasecret\n' > "$extra_patterns"
-    printf 'envsecret\n' > "$env_patterns"
-    export PUBLIC_CONTENT_GUARD_PATTERN_FILE="$env_patterns"
+    printf 'This mentions internaltool.\n' > "$repo/README.md"
+    git -C "$repo" add README.md
 
-    printf 'This mentions usersecret.\n' > "$repo/user.md"
-    printf 'This mentions reposecret.\n' > "$repo/repo.md"
-    printf 'This mentions extrasecret.\n' > "$repo/extra.md"
-    printf 'This mentions envsecret.\n' > "$repo/env.md"
-    git -C "$repo" add user.md repo.md extra.md env.md
-
-    run run_guard_check "$repo" --staged --patterns-file "$extra_patterns"
-    [[ "$status" -eq 1 ]]
-    [[ "$output" == *"user.md: +This mentions usersecret."* ]]
-    [[ "$output" == *"repo.md: +This mentions reposecret."* ]]
-    [[ "$output" == *"extra.md: +This mentions extrasecret."* ]]
-    [[ "$output" == *"env.md: +This mentions envsecret."* ]]
+    run run_guard_check "$repo" --staged
+    [[ "$status" -eq 0 ]]
 }
 
 @test "dotty guard installs hooks that use one shared pattern source" {

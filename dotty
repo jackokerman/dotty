@@ -1995,17 +1995,12 @@ _resolve_script_dir() {
 
 _guard_check_usage() {
     cat <<'EOF'
-Usage: dotty guard-check [--staged|--worktree] [--patterns-file PATH] [--exclude PATH] [PATH...]
+Usage: dotty guard-check [--staged|--worktree] [--exclude PATH] [PATH...]
 
 Blocks added public-repo lines that match configured sensitive-content patterns.
 
-Default pattern sources:
-  - repo .githooks/sensitive-content-patterns when present
-  - $XDG_CONFIG_HOME/public-content-guard/patterns when present
-
-Override pattern sources:
-  - colon-separated $PUBLIC_CONTENT_GUARD_PATTERN_FILE paths
-  - newline-separated $PUBLIC_CONTENT_GUARD_PATTERNS entries
+Pattern source:
+  - $XDG_CONFIG_HOME/public-content-guard/patterns
 
 Set PUBLIC_CONTENT_GUARD_SKIP=1 to disable the guard.
 EOF
@@ -2057,7 +2052,6 @@ cmd_guard_check() {
     local mode="staged"
     local -a paths=()
     local -a excludes=()
-    local -a pattern_files=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -2066,11 +2060,6 @@ cmd_guard_check() {
                 ;;
             --worktree)
                 mode="worktree"
-                ;;
-            --patterns-file)
-                [[ $# -ge 2 ]] || die "--patterns-file requires a path"
-                pattern_files+=("$2")
-                shift
                 ;;
             --exclude)
                 [[ $# -ge 2 ]] || die "--exclude requires a path"
@@ -2104,29 +2093,10 @@ cmd_guard_check() {
     local repo_root
     repo_root="$(_guard_check_repo_root)"
 
-    local default_repo_patterns="$repo_root/.githooks/sensitive-content-patterns"
-    local default_user_patterns="${XDG_CONFIG_HOME:-$HOME/.config}/public-content-guard/patterns"
+    local user_patterns="${XDG_CONFIG_HOME:-$HOME/.config}/public-content-guard/patterns"
 
     _GUARD_CHECK_PATTERNS=()
-    pattern_files=("$default_repo_patterns" "$default_user_patterns" "${pattern_files[@]+"${pattern_files[@]}"}")
-
-    if [[ -n "${PUBLIC_CONTENT_GUARD_PATTERN_FILE:-}" ]]; then
-        local -a env_pattern_files=()
-        IFS=':' read -r -a env_pattern_files <<< "$PUBLIC_CONTENT_GUARD_PATTERN_FILE"
-        pattern_files+=("${env_pattern_files[@]}")
-    fi
-
-    local pattern_file
-    for pattern_file in "${pattern_files[@]+"${pattern_files[@]}"}"; do
-        _guard_check_load_patterns_file "$pattern_file"
-    done
-
-    if [[ -n "${PUBLIC_CONTENT_GUARD_PATTERNS:-}" ]]; then
-        local pattern
-        while IFS= read -r pattern || [[ -n "$pattern" ]]; do
-            _guard_check_append_pattern "$pattern"
-        done <<< "$PUBLIC_CONTENT_GUARD_PATTERNS"
-    fi
+    _guard_check_load_patterns_file "$user_patterns"
 
     local combined
     combined="$(_guard_check_combined_patterns)"
@@ -2262,22 +2232,11 @@ _install_guard_hook() {
 }
 
 _guard_pattern_hint() {
-    if [[ -n "${PUBLIC_CONTENT_GUARD_PATTERNS:-}" ]]; then
-        local count=0
-        while IFS= read -r line; do
-            line="${line## }"
-            line="${line%% }"
-            [[ -z "$line" || "$line" == \#* ]] && continue
-            count=$((count + 1))
-        done <<< "$PUBLIC_CONTENT_GUARD_PATTERNS"
-        info "PUBLIC_CONTENT_GUARD_PATTERNS has $count pattern(s) configured."
+    local user_patterns="${XDG_CONFIG_HOME:-$HOME/.config}/public-content-guard/patterns"
+    if [[ -f "$user_patterns" ]]; then
+        info "Public content guard pattern file configuration is available."
     else
-        local user_patterns="${XDG_CONFIG_HOME:-$HOME/.config}/public-content-guard/patterns"
-        if [[ -f "$user_patterns" || -n "${PUBLIC_CONTENT_GUARD_PATTERN_FILE:-}" ]]; then
-            info "Public content guard pattern file configuration is available."
-        else
-            warning "No public content guard patterns are configured yet."
-        fi
+        warning "No public content guard patterns are configured yet."
     fi
 }
 
@@ -2804,10 +2763,6 @@ Repo command environment:
   DOTTY_LIB                Path to command utility library (source "$DOTTY_LIB")
 
 Guard:
-  PUBLIC_CONTENT_GUARD_PATTERNS
-                           Temporary newline-separated patterns to block in commits
-  PUBLIC_CONTENT_GUARD_PATTERN_FILE
-                           Extra colon-separated pattern files to load
   PUBLIC_CONTENT_GUARD_SKIP=1
                            Disable guard checks
 

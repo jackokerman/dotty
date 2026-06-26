@@ -662,8 +662,6 @@ dotty guard ~/my-repo    # specific repo
 
 The hook runs `dotty guard-check --staged` at commit time and blocks the commit if any staged added lines match. If no patterns are configured, the hook is a no-op. Set `PUBLIC_CONTENT_GUARD_SKIP=1` to bypass the guard for an intentional commit.
 
-For escape hatches, you can add repo-specific patterns in `.githooks/sensitive-content-patterns`, pass one-off files with `--patterns-file`, add colon-separated files through `PUBLIC_CONTENT_GUARD_PATTERN_FILE`, or provide newline-separated temporary patterns with `PUBLIC_CONTENT_GUARD_PATTERNS`.
-
 ### `dotty guard [path]`
 
 Installs the pre-commit hook into the target repo's `.git/hooks/`. If a hook already exists, dotty checks whether it's one it installed (via a marker comment). If it is, dotty refreshes it in place so hook updates are picked up. If it's a foreign hook, it prompts before overwriting.
@@ -676,7 +674,6 @@ Useful options:
 
 - `--staged`: check staged added lines; this is the default.
 - `--worktree`: check tracked worktree files.
-- `--patterns-file PATH`: load an extra pattern file.
 - `--exclude PATH`: exclude a pathspec from the check.
 
 ### `dotty unguard [path]`
