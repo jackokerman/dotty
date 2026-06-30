@@ -274,6 +274,20 @@ In practice, most environment-specific config is delivered through the extend pa
 
 ## Commands
 
+### Choosing a refresh command
+
+Use the smallest command that matches what changed:
+
+- No dotty command is needed for changes that do not affect live linked files, generated runtime config, hooks, cleanups, or installed dotty state.
+- `dotty link [name]` re-creates symlinks and removes orphan symlinks without pulling repos, running cleanups, or running hooks.
+- `dotty update <name>` pulls dotty and one registered repo, then re-links the full active chain and runs cleanups and hooks.
+- `dotty update` pulls dotty and the whole active chain, then re-links, runs cleanups, and runs hooks.
+- `dotty self-update` updates only the dotty tool itself.
+
+Dotty intentionally does not classify repo-specific changed paths. A generic tool cannot reliably know whether a file affects generated config, hooks, downstream tooling, or an external control surface without rules owned by that repo. Put repo-specific refresh strategies in managed repo docs, repo-defined `dotty run` commands, or separate domain-specific tooling.
+
+The per-machine operation lock is the safety boundary for mutating commands. It prevents overlapping `install`, `update`, `link`, `uninstall`, and `self-update` runs from mutating shared dotty or home-directory state at the same time, but it does not choose the narrowest refresh command for you.
+
 ### `dotty install [url-or-path]`
 
 The main entry point. Resolves the dependency chain, clones missing repos, creates symlinks, and runs hooks.

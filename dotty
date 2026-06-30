@@ -2741,6 +2741,17 @@ Pass-through:
   Use -- to stop dotty option parsing before repo-command args that reuse
   -v/--verbose or -n/--dry-run. Example: dotty run foo -- --verbose
 
+Refresh guide:
+  Use the smallest command that matches what changed:
+    dotty link [name]       Re-link only; skip pulls, cleanups, and hooks
+    dotty update <name>     Pull one registered repo, then refresh the chain
+    dotty update            Pull and refresh the whole active chain
+    dotty self-update       Update only the dotty tool
+  No dotty command is needed when live links, generated config, hooks,
+  cleanups, and installed dotty state are unaffected. Dotty does not classify
+  repo-specific changed paths; keep those rules in managed repo docs,
+  repo-defined dotty run commands, or domain-specific tooling.
+
 Hook environment:
   DOTTY_REPO_DIR           Absolute path to the repo being processed
   DOTTY_ENV                Detected environment (empty if none)
