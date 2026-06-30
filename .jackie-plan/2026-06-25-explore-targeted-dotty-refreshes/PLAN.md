@@ -1,9 +1,9 @@
 ---
 id: 2026-06-25-explore-targeted-dotty-refreshes
 title: Explore targeted Dotty refreshes
-state: inbox
+state: ready-to-implement
 createdAt: 2026-06-25T18:28:43.071Z
-updatedAt: 2026-06-25T18:28:43.071Z
+updatedAt: 2026-06-30T00:56:36.437Z
 ---
 
 # Explore targeted Dotty refreshes
@@ -12,46 +12,62 @@ updatedAt: 2026-06-25T18:28:43.071Z
 
 # Objective
 
-Explore whether Dotty should support a narrower, deterministic refresh path for changes that do not need a full `dotty update`, and whether queued/coalesced update behavior is worth adding after operation locking.
+Document Dotty's existing refresh levels so future users and agents can choose the smallest honest command without adding repo-specific path heuristics to generic Dotty.
+
+# Current contract
+
+Dotty already has distinct refresh behaviors:
+
+- `dotty update [name]` pulls dotty and one or more registered repos, then re-runs the full symlink, cleanup, and hook cycle.
+- `dotty link [name]` re-creates symlinks and cleans orphan symlinks without pulling repos, running cleanups, or running hooks.
+- `dotty self-update` updates only the Dotty tool itself.
+
+The operation lock is the safety boundary for mutating commands. It prevents overlapping `install`, `update`, `link`, `uninstall`, and `self-update` operations from mutating shared Dotty or home-directory state at the same time.
 
 # User problem
 
-The safe default is currently to run `dotty update` after tracked config changes, but some edits clearly do not need the full update cycle. A broad update pulls repos, relinks the chain, runs hooks, and can trigger downstream workflows in managed setups. Operation locking prevents overlapping mutation, but it can still make agents wait behind unnecessary broad work.
+The safe default after tracked config changes is often `dotty update`, but some edits do not need the full update cycle. A broad update pulls repos, relinks the chain, runs cleanups, and runs hooks. Operation locking prevents unsafe overlap, but it does not avoid unnecessary broad work.
 
-# Design questions
+# Planning conclusion
 
-- Can Dotty classify common changes into required refresh levels?
-  - no live refresh needed;
-  - `dotty link` enough;
-  - generated config or repo hook refresh needed;
-  - full `dotty update` needed.
-- Should Dotty expose a command that recommends the smallest refresh based on changed paths, or is this better as downstream guidance?
-- Is there a deterministic way to queue/coalesce update requests after the existing operation lock, or is waiting on the lock sufficient?
-- Should a second `dotty update` request made while one is running become a pending follow-up, or simply wait and then return because the first update already refreshed state?
-- How should this interact with dry-runs, hooks, cleanups, and repo-defined `dotty run` commands?
+Make this a docs-only pass for Dotty core.
 
-# Constraints
+Do not add a `dotty refresh-plan` command in this slice. The command would mostly print static guidance, and adding command surface before repeated use proves it is needed would make Dotty less simple without much benefit.
 
-- Avoid overengineering. The existing operation lock already solves the safety issue.
-- Do not rely on agents deciding from scratch whether broad refresh is safe.
-- Keep behavior portable and deterministic in shell.
-- Keep Dotty open-source and generic; managed repo-specific path heuristics belong downstream.
-- Prefer an inspect/recommend command before adding automatic path classification that could be wrong.
+Do not add automatic changed-path classification to generic Dotty. Dotty cannot reliably know whether a changed path affects generated config, hooks, machine-local workflows, downstream tooling, or external control surfaces without repo-specific rules.
+
+Repo-specific refresh strategies should live downstream, either in managed repo docs, repo-defined `dotty run` commands, or separate tooling that owns the relevant domain.
+
+# Generic refresh ladder to document
+
+- No Dotty command needed: changes that do not affect live linked files, generated runtime config, hooks, cleanups, or installed Dotty state.
+- `dotty link`: changed files under linked `home/` trees or environment overlays when only symlink/orphan refresh is needed.
+- `dotty update <name>`: one registered repo needs pulling, followed by the full chain link, cleanup, and hook cycle.
+- `dotty update`: the whole active chain should be pulled, relinked, cleaned up, and re-hooked.
+- `dotty self-update`: only the Dotty tool itself should be updated.
 
 # Potential first slice
 
-Add documentation and/or a small `dotty refresh-plan` style command that explains the current refresh ladder and, optionally, reads Git status from registered repos to recommend one of:
+Update README/help docs to make the refresh ladder explicit and to warn that generic Dotty does not classify repo-specific changed paths.
 
-- no Dotty command needed;
-- `dotty link`;
-- `dotty update <repo>`;
-- full `dotty update`.
+Keep the implementation small:
 
-If queueing is explored, prefer coalescing semantics over a long FIFO: multiple pending full updates should collapse into one final update, because Dotty updates shared state to the latest repo state rather than applying independent user transactions.
+- Add a short refresh guidance section to `README.md` near the command docs.
+- Update `cmd_help()` only if a concise note improves command selection without making help noisy.
+- Do not change completions unless a command description changes.
+- Do not add new commands or queueing behavior.
+
+# Deferred follow-ups
+
+- Downstream repos may define their own refresh/sync strategy using docs, repo-defined `dotty run` commands, or domain-specific tooling.
+- Development-checkout sync for local tool repos belongs in the downstream repo that owns that workflow, not in generic Dotty, unless Dotty later needs a minimal primitive to support it.
+- Queueing/coalescing update requests should remain out of scope until there is observed redundant-update pain after operation locking.
 
 # Acceptance criteria
 
-- Future agents can choose a smaller deterministic refresh path when a change cannot affect generated or linked runtime output.
+- README/help guidance makes the existing refresh ladder explicit.
+- The docs clearly say generic Dotty does not classify repo-specific changed paths.
 - The operation lock remains the safety boundary for mutating commands.
-- Any queueing design is explicitly justified as reducing redundant work, not replacing locking.
-- Tests or shell-level validation cover any new command or lock behavior.
+- No new command, queue, config mechanism, or automatic classifier is added in this slice.
+- The docs keep Dotty open-source and generic; managed repo-specific heuristics stay downstream.
+- Verification covers the documentation/edit scope, with no behavior tests required unless command text changes in a test-covered way.
