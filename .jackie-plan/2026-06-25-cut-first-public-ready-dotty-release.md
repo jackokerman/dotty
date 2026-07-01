@@ -30,3 +30,7 @@ Dotty has a first public-ready tagged release with clear release notes.
 
 ## Notes
 This is release mechanics, not product work. If the user asks for implementation work, prefer the onboarding pass plan first.
+
+## Agent handoff
+
+Completed the first public-ready release mechanics for dotty. Verified `main` was clean and matched `origin/main`, confirmed `dotty version` reports `0.3.0`, ran the full bats suite successfully, created and pushed annotated tag `v0.3.0` at `f67bc2f`, and published GitHub release notes that explicitly state the curl installer intentionally remains on `main` for this first release.

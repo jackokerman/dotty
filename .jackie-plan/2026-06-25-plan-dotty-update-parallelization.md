@@ -122,3 +122,27 @@ Implement the selected first pass only: opt-in parallel git pulls for full-chain
 Before editing, inspect `pull_if_clean`, `run_chain`, `cmd_update`, and the existing Bats helpers. Add focused Bats coverage for job normalization, pull-before-process behavior, deterministic log replay, change-marker propagation back to `_DOTTY_CHANGES_MADE`, preserved warning-and-continue semantics, and dry-run skipping pulls.
 
 Keep Bash 3.2 portability. Do not use `wait -n`. A simple batch scheduler is acceptable. Update `cmd_help()` and `README.md` for `DOTTY_UPDATE_JOBS`. Run the smallest relevant Bats file while iterating, then `./test/bats/bin/bats test/`. Update/checkpoint the Jackie Plan, commit with a conventional commit, and push `main`.
+
+## Agent handoff
+
+Implemented the selected first pass for opt-in parallel git pulls during full-chain `dotty update`.
+
+Changed `dotty` to normalize `DOTTY_UPDATE_JOBS`, defaulting to `1`; values greater than `1` run chain repo pulls in Bash 3.2-compatible batches before serial repo processing. The default serial pull-then-process path remains separate. The parallel path is only eligible for `run_chain true update` when not in dry-run mode, so `install`, self-update, dry-run, and `dotty update <repo>` keep serial/no-pull behavior. Parallel pull logs are captured and replayed in chain order, and child `_DOTTY_CHANGES_MADE` state is propagated back to the parent for reload marker handling.
+
+Added `test/update_parallel.bats` covering job normalization, default serial behavior, pull-before-process behavior, deterministic replay, change marker propagation, warning-and-continue behavior, dry-run pull skipping, and install/no-pull update preservation. Updated `cmd_help()` and `README.md` for `DOTTY_UPDATE_JOBS`.
+
+Verification passed:
+- `./test/bats/bin/bats test/update_parallel.bats`
+- `bash -n dotty test/update_parallel.bats`
+- `git diff --check`
+- `./test/bats/bin/bats test/`
+
+Repo status before commit contained only intended changes: `README.md`, `dotty`, and `test/update_parallel.bats`.
+
+## Supporting context
+
+## Local measurement note
+
+A non-mutating timing pass used `git fetch --dry-run --quiet` to estimate the current pull parallelization ceiling. On a local two-repo chain, serial chain fetch took about 2.42s and parallel chain fetch took about 2.06s. Including a serial dotty self fetch before the chain, the serial estimate was about 2.29s and self-then-parallel-chain estimate was about 2.03s. These single-run timings are noisy but suggest the first-pass feature is testable and modestly useful on short chains.
+
+A separate `dotty --dry-run update` run took about 19.09s with pulls and hooks skipped, which means pull parallelization is not the only meaningful performance opportunity. Keep the first pass scoped to parallel pulls, but consider follow-up measurement for link/status/update dry-run costs after the pull feature exists.

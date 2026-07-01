@@ -18,7 +18,7 @@ Dotfiles hooks sometimes need temporary cleanup logic when a tool is removed, re
 Current examples that motivated this plan:
 
 - `cleanup_legacy_gsd_core` in the base dotfiles hook removes old GSD Core files and has a TODO to remove after propagation.
-- Stripe overlay cleanup helpers remove legacy tmux-agent-bar state and stale Codex plugin wrapper outputs from `.dotty/run.sh`.
+- A private overlay's cleanup helpers remove legacy tmux-agent-bar state and stale Codex plugin wrapper outputs from `.dotty/run.sh`.
 
 ## Goal
 Add a first-class Dotty cleanup-task surface that lets repos ship one-shot cleanup or migration scripts outside the permanent hook. Dotty should run applicable tasks automatically during `install` and `update`, record local completion, skip completed tasks, and expose status so stale cleanup files are easier to retire.
@@ -150,3 +150,7 @@ Add focused Bats coverage for:
 5. Update help, completions, README, and AGENTS.
 6. Add Bats tests, starting with execution/state behavior before status/doctor polish.
 7. Migrate `cleanup_legacy_gsd_core` from the base dotfiles hook into a real cleanup task as a downstream validation once the Dotty feature lands.
+
+## Agent handoff
+
+Implemented and verified Dotty one-shot cleanup tasks. The feature discovers .dotty/cleanups tasks, supports executable-file and directory/run.sh shapes, optional Bash metadata for environment/machine/description, install/update execution after linking and before hooks, dry-run reporting without execution or state writes, local done/failed receipts under $DOTTY_DIR/cleanups/<repo>/<id>, dotty cleanups status, doctor validation, zsh completions, README, AGENTS, and focused Bats tests. Verification passed: ./test/bats/bin/bats test/cleanups.bats, targeted adjacent suites, bash -n dotty, and full ./test/bats/bin/bats test/.

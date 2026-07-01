@@ -71,3 +71,21 @@ Keep the implementation small:
 - No new command, queue, config mechanism, or automatic classifier is added in this slice.
 - The docs keep Dotty open-source and generic; managed repo-specific heuristics stay downstream.
 - Verification covers the documentation/edit scope, with no behavior tests required unless command text changes in a test-covered way.
+
+## Agent handoff
+
+Implemented the docs-only refresh ladder slice.
+
+Changed:
+- Added `README.md` guidance for choosing between no Dotty command, `dotty link [name]`, `dotty update <name>`, `dotty update`, and `dotty self-update`.
+- Added a compact `Refresh guide` section to `dotty help` with the same command-selection boundaries.
+- Documented that generic Dotty intentionally does not classify repo-specific changed paths and that repo-specific strategies belong in managed repo docs, repo-defined `dotty run` commands, or domain-specific tooling.
+- Kept the operation lock framed as the safety boundary for overlapping mutating commands, not as a refresh selector.
+
+Verification:
+- `./dotty help`
+- `bash -n dotty`
+- `./test/bats/bin/bats test/` (145 tests passed; log at `/tmp/dotty-bats-refresh-docs.log`)
+
+Process notes:
+- No objective process friction surfaced. The existing plan was accurate and the repository had no unrelated dirty work.

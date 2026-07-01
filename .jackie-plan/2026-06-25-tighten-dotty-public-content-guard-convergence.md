@@ -21,3 +21,7 @@ Implementation scope:
 Verification:
 - Run the focused guard bats test.
 - Run a short docs/help text search for public-content guard references.
+
+## Agent handoff
+
+Completed the guard convergence cleanup. README setup now leads with `$XDG_CONFIG_HOME/public-content-guard/patterns`; `dotty guard-check --help` separates default pattern sources from override pattern sources; `dotty help` labels env vars as temporary/extra guard inputs; and `test/guard.bats` uses the machine-wide pattern file for the shared-source hook installation fixture. Verified `./test/bats/bin/bats test/guard.bats`, `./dotty guard-check --help`, the guard section of `./dotty help`, reference searches for guard docs, and the full `./test/bats/bin/bats test/` suite. Local sample checks found installed hooks in managed repos, but no tracked repo-local `.githooks/sensitive-content-patterns` files or inline env pattern definitions requiring a follow-up. Follow-up audit found no durable next item.
