@@ -5,8 +5,6 @@ state: inbox
 createdAt: 2026-06-25T03:23:22.317Z
 updatedAt: 2026-06-25T03:23:22.317Z
 sourcePlan: 2026-06-25-build-preferred-personal-tooling-stack
-sourceRepo: /Users/jackokerman/dotfiles
-sourcePath: .
 ---
 
 # Summary
