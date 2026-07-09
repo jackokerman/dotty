@@ -730,7 +730,6 @@ Each test gets a fully isolated environment with a temporary `$HOME`, registry, 
 - `registry.bats` — registry CRUD
 - `commands.bats` — command-level behavior for `add`, `check`, `commands`, `files`, `run`, and `status`
 - `cleanups.bats` — one-shot cleanup task execution, state, filters, status, and validation
-- `doctor.bats` — `dotty doctor` diagnostics and failure cases
 - `symlinks.bats` — symlink creation, directory merging, orphan cleanup
 - `chain.bats` — chain resolution, cycle detection, environment detection
 - `dry_run.bats` — dry-run mode
@@ -742,7 +741,7 @@ Each test gets a fully isolated environment with a temporary `$HOME`, registry, 
 - `uninstall.bats` — repo uninstallation and backup restore
 - `migrate.bats` — `.dotty/config` and hook discovery helpers
 - `self_update.bats` — self-update logic and loop guard
-- `shell_init.bats` — shell-init output, change detection, reload marker
+- `shell_init.bats` — change detection and reload marker behavior
 
 ## Migrating from a manual install script
 

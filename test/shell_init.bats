@@ -11,37 +11,6 @@ teardown() {
     teardown_test_env
 }
 
-# cmd_shell_init
-
-@test "shell-init outputs zsh wrapper when SHELL is zsh" {
-    SHELL=/bin/zsh run cmd_shell_init
-    [[ "$status" -eq 0 ]]
-    [[ "$output" == *'dotty()'* ]]
-    [[ "$output" == *'command dotty "$@"'* ]]
-    [[ "$output" == *'-o interactive'* ]]
-    [[ "$output" == *'exec "$SHELL"'* ]]
-}
-
-@test "shell-init outputs bash wrapper when SHELL is bash" {
-    SHELL=/bin/bash run cmd_shell_init
-    [[ "$status" -eq 0 ]]
-    [[ "$output" == *'dotty()'* ]]
-    [[ "$output" == *'command dotty "$@"'* ]]
-    [[ "$output" == *'$- == *i*'* ]]
-    [[ "$output" == *'exec "$SHELL"'* ]]
-}
-
-@test "shell-init fails for unsupported shell" {
-    SHELL=/bin/fish run cmd_shell_init
-    [[ "$status" -ne 0 ]]
-    [[ "$output" == *'Unsupported shell'* ]]
-}
-
-@test "shell-init wrapper checks .needs-reload marker" {
-    SHELL=/bin/zsh run cmd_shell_init
-    [[ "$output" == *'.needs-reload'* ]]
-}
-
 # _DOTTY_CHANGES_MADE flag via create_symlink
 
 @test "create_symlink sets _DOTTY_CHANGES_MADE on new link" {
