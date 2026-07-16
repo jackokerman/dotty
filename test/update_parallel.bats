@@ -49,7 +49,7 @@ make_chain() {
     [[ "${lines[$((${#lines[@]} - 1))]}" == "1" ]]
 }
 
-@test "unset DOTTY_UPDATE_JOBS keeps serial pull then process behavior" {
+@test "unset DOTTY_UPDATE_JOBS keeps serial pulls before repo processing" {
     make_chain
 
     pull_if_clean() {
@@ -63,7 +63,7 @@ make_chain() {
     unset DOTTY_UPDATE_JOBS
     run run_chain "true" "update"
     [[ "$status" -eq 0 ]]
-    [[ "$output" == $'pull:base\nprocess:base\npull:overlay\nprocess:overlay' ]]
+    [[ "$output" == $'pull:base\npull:overlay\nprocess:base\nprocess:overlay' ]]
 }
 
 @test "DOTTY_UPDATE_JOBS pulls before serial processing for full-chain update" {
@@ -179,7 +179,7 @@ make_chain() {
     export DOTTY_UPDATE_JOBS=2
     run run_chain "true" "install"
     [[ "$status" -eq 0 ]]
-    [[ "$output" == $'pull:base\nprocess:base\npull:overlay\nprocess:overlay' ]]
+    [[ "$output" == $'pull:base\npull:overlay\nprocess:base\nprocess:overlay' ]]
 
     run run_chain "false" "update"
     [[ "$status" -eq 0 ]]

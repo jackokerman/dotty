@@ -155,6 +155,7 @@ my-dotfiles/
 │   │   └── my-command      # executable, runnable via `dotty run my-command`
 │   ├── cleanups/           # one-shot cleanup tasks (optional)
 │   │   └── 2026-remove-old-tool
+│   ├── managed-checkouts.tsv # editable Git checkouts dotty may sync (optional)
 │   └── run.sh              # hook script (optional, must be executable)
 ├── home/                   # symlinked to $HOME
 │   ├── .zshrc              # → ~/.zshrc
@@ -189,12 +190,13 @@ Running `dotty install ~/work-dotfiles` kicks off the following:
 
 1. Reads `work-dotfiles/.dotty/config`, sees it extends personal dotfiles
 2. Clones personal dotfiles to `~/.dotty/repos/dotfiles` (dependency, auto-cloned)
-3. Symlinks `dotfiles/home/` into `$HOME` (base layer)
-4. Runs pending one-shot cleanup tasks from `dotfiles/.dotty/cleanups/`
-5. Runs `dotfiles/.dotty/run.sh`
-6. Symlinks `work-dotfiles/home/` into `$HOME` (overlay, wins on conflicts)
-7. Runs pending one-shot cleanup tasks from `work-dotfiles/.dotty/cleanups/`
-8. Runs `work-dotfiles/.dotty/run.sh`
+3. Syncs managed checkouts from `.dotty/managed-checkouts.tsv` files across the chain
+4. Symlinks `dotfiles/home/` into `$HOME` (base layer)
+5. Runs pending one-shot cleanup tasks from `dotfiles/.dotty/cleanups/`
+6. Runs `dotfiles/.dotty/run.sh`
+7. Symlinks `work-dotfiles/home/` into `$HOME` (overlay, wins on conflicts)
+8. Runs pending one-shot cleanup tasks from `work-dotfiles/.dotty/cleanups/`
+9. Runs `work-dotfiles/.dotty/run.sh`
 
 ### Directory merging
 
@@ -278,19 +280,20 @@ In practice, most environment-specific config is delivered through the extend pa
 
 Use the smallest command that matches what changed:
 
-- No dotty command is needed for changes that do not affect live linked files, generated runtime config, hooks, cleanups, or installed dotty state.
+- No dotty command is needed for changes that do not affect live linked files, generated runtime config, managed checkouts, hooks, cleanups, or installed dotty state.
 - `dotty link [name]` re-creates symlinks and removes orphan symlinks without pulling repos, running cleanups, or running hooks.
-- `dotty update <name>` pulls dotty and one registered repo, then re-links the full active chain and runs cleanups and hooks.
-- `dotty update` pulls dotty and the whole active chain, then re-links, runs cleanups, and runs hooks.
+- `dotty checkouts` syncs managed checkouts from the active chain without re-linking dotfiles.
+- `dotty update <name>` pulls dotty and one registered repo, then syncs managed checkouts, re-links the full active chain, and runs cleanups and hooks.
+- `dotty update` pulls dotty and the whole active chain, then syncs managed checkouts, re-links, runs cleanups, and runs hooks.
 - `dotty self-update` updates only the dotty tool itself.
 
 Dotty intentionally does not classify repo-specific changed paths. A generic tool cannot reliably know whether a file affects generated config, hooks, downstream tooling, or an external control surface without rules owned by that repo. Put repo-specific refresh strategies in managed repo docs, repo-defined `dotty run` commands, or separate domain-specific tooling.
 
-The per-machine operation lock is the safety boundary for mutating commands. It prevents overlapping `install`, `update`, `link`, `uninstall`, and `self-update` runs from mutating shared dotty or home-directory state at the same time, but it does not choose the narrowest refresh command for you.
+The per-machine operation lock is the safety boundary for mutating commands. It prevents overlapping `install`, `update`, `checkouts`, `link`, `uninstall`, and `self-update` runs from mutating shared dotty or home-directory state at the same time, but it does not choose the narrowest refresh command for you.
 
 ### `dotty install [url-or-path]`
 
-The main entry point. Resolves the dependency chain, clones missing repos, creates symlinks, and runs hooks.
+The main entry point. Resolves the dependency chain, clones missing repos, syncs managed checkouts, creates symlinks, and runs hooks.
 
 With an argument, it sets up a new dotfiles repo (cloning dependencies as needed). When given a URL, the source repo is cloned to `~/<basename>` (e.g., `~/work-dotfiles`) so it's easy to find and edit. Dependencies in the chain are still cloned to `~/.dotty/repos/`. Without an argument, it re-runs the full install cycle on the existing registered repos. This is useful when you want to re-trigger one-time setup scripts (like macOS defaults) that are guarded behind `DOTTY_COMMAND == "install"`.
 
@@ -302,7 +305,7 @@ dotty install                                          # re-run install on exist
 
 ### `dotty update [name]`
 
-Pulls dotty itself, then pulls all repos (or a specific one) and re-runs the full symlink and hook cycle. The self-update happens before anything else so the updated script is ready for the next invocation. The script body is wrapped in `{ ... }` braces so bash reads it fully into memory, making mid-run file changes safe.
+Pulls dotty itself, then pulls all repos (or a specific one), syncs managed checkouts, and re-runs the full symlink and hook cycle. The self-update happens before anything else so the updated script is ready for the next invocation. The script body is wrapped in `{ ... }` braces so bash reads it fully into memory, making mid-run file changes safe.
 
 ```bash
 dotty update              # update dotty, pull and re-link everything
@@ -312,7 +315,16 @@ DOTTY_UPDATE_JOBS=4 dotty update  # pull full-chain repos in parallel batches
 
 `DOTTY_UPDATE_JOBS` defaults to `1`, preserving serial pull behavior. Values greater than `1` apply only to full-chain `dotty update`; linking, cleanup tasks, hooks, `install`, dry-run, self-update, and `dotty update <name>` still run serially.
 
-Dotty also takes a per-machine operation lock for commands that mutate shared Dotty or home-directory state: `install`, `update`, `link`, `uninstall`, and `self-update`. If another locked operation is already running, the next one waits and prints the current lock owner. Read-only commands and repo-defined `dotty run` commands are not serialized.
+Dotty also takes a per-machine operation lock for commands that mutate shared Dotty or home-directory state: `install`, `update`, `checkouts`, `link`, `uninstall`, and `self-update`. If another locked operation is already running, the next one waits and prints the current lock owner. Read-only commands and repo-defined `dotty run` commands are not serialized.
+
+### `dotty checkouts`
+
+Syncs editable Git checkouts declared by `.dotty/managed-checkouts.tsv` files across the active chain. This is the focused version of the same managed-checkout pass that `dotty install` and `dotty update` run automatically after chain repos are pulled and before repo files, cleanups, or hooks are processed.
+
+```bash
+dotty checkouts
+dotty -n checkouts   # preview clone, fetch, fast-forward, and install actions
+```
 
 ### `dotty commands`
 
@@ -462,7 +474,7 @@ Global dotty options can be placed before or after the command name.
 
 `-v`, `--verbose` — Show per-file messages instead of just summary counts. Useful for debugging which files are being linked, skipped, or cleaned up.
 
-`-n`, `--dry-run` — Preview what would change without modifying the filesystem. Shows symlinks that would be created, updated, or removed (orphan cleanup), and pending cleanups that would run. Cleanup scripts, hooks, and git pulls are skipped entirely.
+`-n`, `--dry-run` — Preview what would change without modifying the filesystem. Shows symlinks that would be created, updated, or removed (orphan cleanup), managed checkout clone/fetch/install intent, and pending cleanups that would run. Cleanup scripts, hooks, and Git clone, fetch, or pull operations are skipped entirely.
 
 ```bash
 dotty --dry-run link      # see what link would do
@@ -475,6 +487,28 @@ If a repo-defined command needs to receive dotty's own global flags literally, i
 dotty run brew-sync -- --verbose
 dotty run my-command -- -n
 ```
+
+## Managed checkouts
+
+Use `.dotty/managed-checkouts.tsv` for editable Git repositories that dotty is allowed to keep present and conservatively current. Manifests are processed in active chain order, so base repos can declare shared checkouts and later overlays can add their own rows. Duplicate `name` values do not merge; the first row wins and later duplicates warn and skip.
+
+The manifest is tab-separated:
+
+```text
+# name	repo-url	branch	checkout	update	install
+my-tool	https://github.com/you/my-tool.git	main	dev	fast-forward
+```
+
+Fields:
+
+- `name`: stable checkout name and duplicate key.
+- `repo-url`: Git remote URL used for clone and exact origin matching.
+- `branch`: branch to clone, fetch, and fast-forward.
+- `checkout`: `dev` for `~/src/<name>`, or an absolute path.
+- `update`: currently only `fast-forward`.
+- `install`: empty, `repo:<relative-command>` from the managed checkout, or `dotty:<relative-command>` from the repo that owns the manifest row.
+
+Dotty clones missing checkouts, fetches and fast-forwards clean matching checkouts, and skips unsafe rows with warnings. It skips dirty, wrong-branch, wrong-origin, non-Git, diverged, malformed, or unsupported rows. Git operations run with interactive prompts disabled. Install actions run only after checkout sync succeeds; an install action failure is reported as an operation failure while remaining rows are still inspected.
 
 ## Hooks
 
@@ -730,6 +764,7 @@ Each test gets a fully isolated environment with a temporary `$HOME`, registry, 
 - `registry.bats` — registry CRUD
 - `commands.bats` — command-level behavior for `add`, `check`, `commands`, `files`, `run`, and `status`
 - `cleanups.bats` — one-shot cleanup task execution, state, filters, status, and validation
+- `managed_checkouts.bats` — managed checkout manifests, sync safety, install actions, dry-run, and lifecycle ordering
 - `symlinks.bats` — symlink creation, directory merging, orphan cleanup
 - `chain.bats` — chain resolution, cycle detection, environment detection
 - `dry_run.bats` — dry-run mode

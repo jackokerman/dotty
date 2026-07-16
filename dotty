@@ -223,6 +223,15 @@ _find_cleanups_dir() {
     fi
 }
 
+_find_managed_checkouts_manifest() {
+    local repo_dir="$1"
+    if [[ -f "$repo_dir/.dotty/managed-checkouts.tsv" ]]; then
+        echo "$repo_dir/.dotty/managed-checkouts.tsv"
+    else
+        return 1
+    fi
+}
+
 # Returns true if the repo has a config file.
 _has_config() {
     local repo_dir="$1"
@@ -916,6 +925,333 @@ run_pending_cleanups() {
     done
 }
 
+_managed_checkout_git() {
+    GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= git "$@"
+}
+
+_managed_checkout_is_relative_command() {
+    local command_path="$1"
+
+    [[ -n "$command_path" ]] || return 1
+    [[ "$command_path" != /* ]] || return 1
+    [[ "$command_path" != "." && "$command_path" != ".." ]] || return 1
+    [[ "$command_path" != ../* ]] || return 1
+    [[ "$command_path" != */../* && "$command_path" != */.. ]] || return 1
+}
+
+_managed_checkout_target_path() {
+    local name="$1"
+    local checkout_spec="$2"
+
+    case "$checkout_spec" in
+        dev)
+            printf '%s\n' "$HOME/src/$name"
+            ;;
+        /*)
+            printf '%s\n' "$checkout_spec"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+_managed_checkout_install_valid() {
+    local install_spec="$1"
+
+    [[ -z "$install_spec" ]] && return 0
+
+    local kind="${install_spec%%:*}"
+    local command_path="${install_spec#*:}"
+    case "$kind" in
+        repo|dotty)
+            _managed_checkout_is_relative_command "$command_path"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+_managed_checkout_records() {
+    local -a seen_names=()
+    local -a seen_owners=()
+    local record_sep=$'\034'
+
+    local i
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        local owner_name="${CHAIN_NAMES[$i]}"
+        local owner_dir="${CHAIN_PATHS[$i]}"
+        local manifest
+        manifest="$(_find_managed_checkouts_manifest "$owner_dir")" || continue
+
+        local line=""
+        local line_number=0
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            line_number=$((line_number + 1))
+            [[ -z "$line" || "$line" == \#* ]] && continue
+
+            local name=""
+            local repo_url=""
+            local branch=""
+            local checkout_spec=""
+            local update_policy=""
+            local install_spec=""
+            local extra=""
+            local parsed_line="${line//$'\t'/$record_sep}"
+            IFS="$record_sep" read -r name repo_url branch checkout_spec update_policy install_spec extra <<< "$parsed_line"
+
+            if [[ -z "$name" || -z "$repo_url" || -z "$branch" || -z "$checkout_spec" || -z "$update_policy" || -n "$extra" ]]; then
+                warning "$manifest:$line_number: malformed managed checkout row; skipping"
+                continue
+            fi
+
+            if [[ "$update_policy" != "fast-forward" ]]; then
+                warning "managed checkout '$name' has unsupported update policy '$update_policy'; skipping"
+                continue
+            fi
+
+            if ! _managed_checkout_target_path "$name" "$checkout_spec" >/dev/null; then
+                warning "managed checkout '$name' has unsupported checkout target '$checkout_spec'; skipping"
+                continue
+            fi
+
+            if ! _managed_checkout_install_valid "$install_spec"; then
+                warning "managed checkout '$name' has unsupported install action '$install_spec'; skipping"
+                continue
+            fi
+
+            local existing_index
+            for existing_index in "${!seen_names[@]}"; do
+                if [[ "${seen_names[$existing_index]}" == "$name" ]]; then
+                    warning "managed checkout '$name' already defined by ${seen_owners[$existing_index]}; skipping duplicate in $owner_name"
+                    continue 2
+                fi
+            done
+
+            seen_names+=("$name")
+            seen_owners+=("$owner_name")
+            printf '%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' \
+                "$name" "$record_sep" "$repo_url" "$record_sep" "$branch" "$record_sep" "$checkout_spec" "$record_sep" \
+                "$update_policy" "$record_sep" "$install_spec" "$record_sep" "$owner_name" "$record_sep" "$owner_dir"
+        done < "$manifest"
+    done
+}
+
+_managed_checkout_run_install() {
+    local name="$1"
+    local install_spec="$2"
+    local checkout_dir="$3"
+    local owner_dir="$4"
+
+    [[ -n "$install_spec" ]] || return 0
+
+    local kind="${install_spec%%:*}"
+    local command_path="${install_spec#*:}"
+    local install_root=""
+
+    case "$kind" in
+        repo)
+            install_root="$checkout_dir"
+            ;;
+        dotty)
+            install_root="$owner_dir"
+            ;;
+        *)
+            warning "managed checkout '$name' has unsupported install action '$install_spec'; skipping"
+            return 0
+            ;;
+    esac
+
+    if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+        info "[dry-run] Would run $kind install action for managed checkout $name: $command_path"
+        return 0
+    fi
+
+    local full_command="$install_root/$command_path"
+    if [[ ! -f "$full_command" || ! -x "$full_command" ]]; then
+        warning "managed checkout '$name' install action is not executable: $full_command"
+        _MANAGED_CHECKOUT_ERRORS+=("$name")
+        return 1
+    fi
+
+    info "Running managed checkout install for $name"
+    local exit_code=0
+    (
+        cd "$install_root"
+        "./$command_path"
+    ) || exit_code=$?
+
+    [[ "$exit_code" -eq 0 ]] && return 0
+
+    warning "managed checkout '$name' install action failed (exit $exit_code)"
+    _MANAGED_CHECKOUT_ERRORS+=("$name")
+    return 1
+}
+
+_managed_checkout_sync_existing() {
+    local name="$1"
+    local repo_url="$2"
+    local branch="$3"
+    local target_path="$4"
+
+    if ! _managed_checkout_git -C "$target_path" rev-parse --git-dir >/dev/null 2>&1; then
+        warning "managed checkout '$name' exists but is not a git repo; skipping"
+        return 1
+    fi
+
+    local current_origin=""
+    current_origin="$(_managed_checkout_git -C "$target_path" remote get-url origin 2>/dev/null)" || {
+        warning "managed checkout '$name' has no origin remote; skipping"
+        return 1
+    }
+    if [[ "$current_origin" != "$repo_url" ]]; then
+        warning "managed checkout '$name' origin mismatch; skipping"
+        return 1
+    fi
+
+    local current_branch=""
+    current_branch="$(_managed_checkout_git -C "$target_path" symbolic-ref --quiet --short HEAD 2>/dev/null)" || {
+        warning "managed checkout '$name' is not on a branch, expected $branch; skipping"
+        return 1
+    }
+    if [[ "$current_branch" != "$branch" ]]; then
+        warning "managed checkout '$name' is on branch $current_branch, expected $branch; skipping"
+        return 1
+    fi
+
+    if ! (
+        cd "$target_path"
+        _managed_checkout_git diff --quiet 2>/dev/null &&
+        _managed_checkout_git diff --cached --quiet 2>/dev/null
+    ); then
+        warning "managed checkout '$name' has local changes; skipping"
+        return 1
+    fi
+
+    if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+        info "[dry-run] Would fetch and fast-forward managed checkout $name at $target_path"
+        return 0
+    fi
+
+    info "Syncing managed checkout $name"
+    if ! _managed_checkout_git -C "$target_path" fetch --prune origin "+refs/heads/$branch:refs/remotes/origin/$branch"; then
+        warning "managed checkout '$name' fetch failed; skipping"
+        return 1
+    fi
+
+    local local_rev=""
+    local remote_rev=""
+    local_rev="$(_managed_checkout_git -C "$target_path" rev-parse --verify HEAD^{commit})" || {
+        warning "managed checkout '$name' local revision is unreadable; skipping"
+        return 1
+    }
+    remote_rev="$(_managed_checkout_git -C "$target_path" rev-parse --verify "refs/remotes/origin/$branch^{commit}")" || {
+        warning "managed checkout '$name' remote revision is unreadable; skipping"
+        return 1
+    }
+
+    if [[ "$local_rev" == "$remote_rev" ]]; then
+        return 0
+    fi
+
+    if _managed_checkout_git -C "$target_path" merge-base --is-ancestor "$local_rev" "$remote_rev"; then
+        if _managed_checkout_git -C "$target_path" merge --ff-only "$remote_rev" >/dev/null; then
+            _DOTTY_CHANGES_MADE=true
+            return 0
+        fi
+
+        warning "managed checkout '$name' fast-forward failed; skipping"
+        return 1
+    fi
+
+    if _managed_checkout_git -C "$target_path" merge-base --is-ancestor "$remote_rev" "$local_rev"; then
+        warning "managed checkout '$name' is ahead of origin/$branch; skipping"
+    else
+        warning "managed checkout '$name' has diverged from origin/$branch; skipping"
+    fi
+    return 1
+}
+
+_sync_managed_checkout_record() {
+    local name="$1"
+    local repo_url="$2"
+    local branch="$3"
+    local checkout_spec="$4"
+    local _update_policy="$5"
+    local install_spec="$6"
+    local _owner_name="$7"
+    local owner_dir="$8"
+
+    local target_path
+    target_path="$(_managed_checkout_target_path "$name" "$checkout_spec")" || {
+        warning "managed checkout '$name' has unsupported checkout target '$checkout_spec'; skipping"
+        return 0
+    }
+
+    local synced=false
+    if [[ ! -e "$target_path" && ! -L "$target_path" ]]; then
+        if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
+            info "[dry-run] Would clone managed checkout $name from $repo_url to $target_path"
+            _managed_checkout_run_install "$name" "$install_spec" "$target_path" "$owner_dir" || true
+            return 0
+        fi
+
+        mkdir -p "$(dirname "$target_path")"
+        info "Cloning managed checkout $name"
+        if _managed_checkout_git clone --branch "$branch" --single-branch "$repo_url" "$target_path"; then
+            _DOTTY_CHANGES_MADE=true
+            synced=true
+        else
+            warning "managed checkout '$name' clone failed; skipping"
+            return 0
+        fi
+    elif [[ -d "$target_path" ]]; then
+        if _managed_checkout_sync_existing "$name" "$repo_url" "$branch" "$target_path"; then
+            synced=true
+        else
+            return 0
+        fi
+    else
+        warning "managed checkout '$name' target exists but is not a directory; skipping"
+        return 0
+    fi
+
+    if [[ "$synced" == "true" ]]; then
+        _managed_checkout_run_install "$name" "$install_spec" "$target_path" "$owner_dir" || true
+    fi
+}
+
+sync_managed_checkouts() {
+    local command="${1:-checkouts}"
+
+    [[ "$command" == "checkouts" || "$command" == "install" || "$command" == "update" ]] || return 0
+
+    local records=""
+    records="$(_managed_checkout_records)"
+    [[ -n "$records" ]] || return 0
+
+    title "Managed checkouts"
+
+    local record_sep=$'\034'
+    local record=""
+    local name=""
+    local repo_url=""
+    local branch=""
+    local checkout_spec=""
+    local update_policy=""
+    local install_spec=""
+    local owner_name=""
+    local owner_dir=""
+    while IFS= read -r record || [[ -n "$record" ]]; do
+        IFS="$record_sep" read -r name repo_url branch checkout_spec update_policy install_spec owner_name owner_dir <<< "$record"
+        [[ -n "$name" ]] || continue
+        _sync_managed_checkout_record "$name" "$repo_url" "$branch" "$checkout_spec" "$update_policy" "$install_spec" "$owner_name" "$owner_dir"
+    done <<< "$records"
+
+    [[ ${#_MANAGED_CHECKOUT_ERRORS[@]} -eq 0 ]]
+}
+
 process_repo() {
     local repo_dir="$1"
     local env="${2:-}"
@@ -999,6 +1335,7 @@ run_chain() {
 
     _HOOK_ERRORS=()
     _CLEANUP_ERRORS=()
+    _MANAGED_CHECKOUT_ERRORS=()
     _LINK_FAIL_COUNT=0
 
     # Register all repos first so the registry is complete even if a hook fails.
@@ -1014,11 +1351,6 @@ run_chain() {
 
     if [[ "$pull" == "true" && "$command" == "update" && "${DOTTY_DRY_RUN:-false}" != "true" && "$update_jobs" -gt 1 ]]; then
         _run_parallel_update_pulls "$update_jobs"
-
-        for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
-            local dir="${CHAIN_PATHS[$i]}"
-            process_repo "$dir" "$env" "$command"
-        done
     else
         for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
             local dir="${CHAIN_PATHS[$i]}"
@@ -1026,13 +1358,22 @@ run_chain() {
             if [[ "$pull" == "true" && "${DOTTY_DRY_RUN:-false}" != "true" ]]; then
                 pull_if_clean "$dir"
             fi
-
-            process_repo "$dir" "$env" "$command"
         done
     fi
 
+    sync_managed_checkouts "$command" || true
+
+    for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
+        local dir="${CHAIN_PATHS[$i]}"
+        process_repo "$dir" "$env" "$command"
+    done
+
     # Print error summary if anything went wrong
     _CHAIN_HAD_ERRORS=false
+    if [[ ${#_MANAGED_CHECKOUT_ERRORS[@]} -gt 0 ]]; then
+        _CHAIN_HAD_ERRORS=true
+        warning "Managed checkout failures: ${_MANAGED_CHECKOUT_ERRORS[*]}"
+    fi
     if [[ ${#_HOOK_ERRORS[@]} -gt 0 ]]; then
         _CHAIN_HAD_ERRORS=true
         warning "Hook failures: ${_HOOK_ERRORS[*]}"
@@ -1568,6 +1909,21 @@ cmd_cleanups() {
 
     if [[ "$printed_any" == "false" ]]; then
         info "No cleanup tasks found."
+    fi
+}
+
+cmd_checkouts() {
+    [[ $# -eq 0 ]] || die "Usage: dotty checkouts"
+
+    registry_init
+    resolve_chain_from_leaf
+
+    _MANAGED_CHECKOUT_ERRORS=()
+    sync_managed_checkouts "checkouts" || true
+
+    if [[ ${#_MANAGED_CHECKOUT_ERRORS[@]} -gt 0 ]]; then
+        warning "Managed checkout failures: ${_MANAGED_CHECKOUT_ERRORS[*]}"
+        return 1
     fi
 }
 
@@ -2710,8 +3066,9 @@ dotty - a dotfiles manager with overlay semantics
 Usage: dotty [-v] [-n] <command> [args]
 
 Commands:
-  install [url-or-path]    Resolve chain, clone deps, link files, run hooks
-  update [name]            Pull dotty and all repos, re-link, re-run hooks
+  install [url-or-path]    Resolve chain, sync checkouts, link files, run hooks
+  update [name]            Pull repos, sync checkouts, re-link, re-run hooks
+  checkouts                Sync managed checkouts from the active chain
   commands                 List repo-defined commands from the active chain
   run <name> [args]        Run a repo-defined command from .dotty/commands/
   cleanups [opts]          List one-shot cleanup task state
@@ -2748,9 +3105,9 @@ Refresh guide:
     dotty update            Pull and refresh the whole active chain
     dotty self-update       Update only the dotty tool
   No dotty command is needed when live links, generated config, hooks,
-  cleanups, and installed dotty state are unaffected. Dotty does not classify
-  repo-specific changed paths; keep those rules in managed repo docs,
-  repo-defined dotty run commands, or domain-specific tooling.
+  managed checkouts, cleanups, and installed dotty state are unaffected. Dotty
+  does not classify repo-specific changed paths; keep those rules in managed
+  repo docs, repo-defined dotty run commands, or domain-specific tooling.
 
 Hook environment:
   DOTTY_REPO_DIR           Absolute path to the repo being processed
@@ -2782,10 +3139,10 @@ General:
   DOTTY_UPDATE_JOBS        Parallel git pulls for full-chain update (default: 1)
 
 Serialization:
-  install, update, link, uninstall, and self-update take a per-machine lock
-  under DOTTY_DIR so overlapping runs wait instead of mutating shared state at
-  the same time. Read-only commands and repo-defined dotty run commands are not
-  serialized.
+  install, update, checkouts, link, uninstall, and self-update take a
+  per-machine lock under DOTTY_DIR so overlapping runs wait instead of mutating
+  shared state at the same time. Read-only commands and repo-defined dotty run
+  commands are not serialized.
 EOF
 }
 
@@ -2866,6 +3223,7 @@ main() {
     case "$cmd" in
         install)      _run_with_operation_lock "$cmd" cmd_install "$@" ;;
         update)       _run_with_operation_lock "$cmd" cmd_update "$@" ;;
+        checkouts)    _run_with_operation_lock "$cmd" cmd_checkouts "$@" ;;
         commands)     cmd_commands "$@" ;;
         run)          cmd_run "$@" ;;
         cleanups)     cmd_cleanups "$@" ;;

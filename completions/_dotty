@@ -21,8 +21,9 @@ _dotty_custom_command_names() {
 
 _dotty() {
     local -a commands=(
-        'install:Resolve chain, clone deps, link files, run hooks'
-        'update:Pull dotty and all repos, re-link, re-run hooks'
+        'install:Resolve chain, sync checkouts, link files, run hooks'
+        'update:Pull repos, sync checkouts, re-link, re-run hooks'
+        'checkouts:Sync managed checkouts from the active chain'
         'commands:List repo-defined commands from the active chain'
         'run:Run a repo-defined command from .dotty/commands/'
         'cleanups:List one-shot cleanup task state'
@@ -103,7 +104,7 @@ _dotty() {
                 '--exclude[Exclude pathspec]:path:_files' \
                 '*:path:_files'
             ;;
-        commands|self-update|shell-init|doctor|check)
+        checkouts|commands|self-update|shell-init|doctor|check)
             ;;
     esac
 }

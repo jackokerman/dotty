@@ -16,15 +16,17 @@
 - `examples/` contains contributor-facing sample dotfiles layouts referenced from the docs and issue forms.
 - `.dotty/commands/` in managed repos is the source of repo-defined `dotty run` commands.
 - `.dotty/cleanups/` in managed repos is the source of one-shot cleanup tasks that run during `install` and `update`.
+- `.dotty/managed-checkouts.tsv` in managed repos is the source of editable Git checkouts that `dotty checkouts`, `install`, and `update` may clone or fast-forward.
 - `test/*.bats` is the repo's behavior test suite.
 
 ## Architecture
 
 - Dotty manages chains of dotfiles repos with later repos overriding earlier repos.
-- Managed repo discovery and compatibility live in the config, hook lookup, and repo-command lookup helpers; keep `.dotty/config`, optional `.dotty/run.sh`, optional `.dotty/commands/`, and migration behavior aligned with the tests and README.
+- Managed repo discovery and compatibility live in the config, hook lookup, repo-command lookup, cleanup lookup, and managed-checkout manifest helpers; keep `.dotty/config`, optional `.dotty/run.sh`, optional `.dotty/commands/`, optional `.dotty/cleanups/`, optional `.dotty/managed-checkouts.tsv`, and migration behavior aligned with the tests and README.
 - `home/` is symlinked into `$HOME`; `$ENV/home/` overlays are applied when an environment is detected.
-- `dotty install` resolves the chain, registers repos, links files, applies overlays, and runs hooks.
-- Mutating Dotty operations take a per-machine lock under `~/.dotty/operation.lock`; keep `install`, `update`, `link`, `uninstall`, and `self-update` serialization aligned with `test/operation_lock.bats`.
+- `dotty install` resolves the chain, registers repos, syncs managed checkouts, links files, applies overlays, and runs hooks.
+- Mutating Dotty operations take a per-machine lock under `~/.dotty/operation.lock`; keep `install`, `update`, `checkouts`, `link`, `uninstall`, and `self-update` serialization aligned with `test/operation_lock.bats`.
+- Managed checkouts run during `install` and `update` after chain repos are pulled and before repo files, cleanups, or hooks are processed. Keep lifecycle ordering aligned with `test/managed_checkouts.bats` and `test/update_parallel.bats`.
 - Pending one-shot cleanups run after linking and before hooks, with local completion state under `~/.dotty/cleanups/`.
 - `dotty link` refreshes symlinks only. It does not pull repos or run hooks.
 - `dotty run` resolves repo-defined commands from the active chain and executes them from the defining repo root.
