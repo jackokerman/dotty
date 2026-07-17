@@ -1042,7 +1042,9 @@ _managed_checkout_run_install() {
     local name="$1"
     local install_spec="$2"
     local checkout_dir="$3"
-    local owner_dir="$4"
+    local repo_url="$4"
+    local branch="$5"
+    local owner_dir="$6"
 
     [[ -n "$install_spec" ]] || return 0
 
@@ -1078,6 +1080,10 @@ _managed_checkout_run_install() {
     info "Running managed checkout install for $name"
     local exit_code=0
     (
+        export DOTTY_MANAGED_CHECKOUT_NAME="$name"
+        export DOTTY_MANAGED_CHECKOUT_DIR="$checkout_dir"
+        export DOTTY_MANAGED_CHECKOUT_REPO_URL="$repo_url"
+        export DOTTY_MANAGED_CHECKOUT_BRANCH="$branch"
         cd "$install_root"
         "./$command_path"
     ) || exit_code=$?
@@ -1193,7 +1199,7 @@ _sync_managed_checkout_record() {
     if [[ ! -e "$target_path" && ! -L "$target_path" ]]; then
         if [[ "${DOTTY_DRY_RUN:-false}" == "true" ]]; then
             info "[dry-run] Would clone managed checkout $name from $repo_url to $target_path"
-            _managed_checkout_run_install "$name" "$install_spec" "$target_path" "$owner_dir" || true
+            _managed_checkout_run_install "$name" "$install_spec" "$target_path" "$repo_url" "$branch" "$owner_dir" || true
             return 0
         fi
 
@@ -1218,7 +1224,7 @@ _sync_managed_checkout_record() {
     fi
 
     if [[ "$synced" == "true" ]]; then
-        _managed_checkout_run_install "$name" "$install_spec" "$target_path" "$owner_dir" || true
+        _managed_checkout_run_install "$name" "$install_spec" "$target_path" "$repo_url" "$branch" "$owner_dir" || true
     fi
 }
 
@@ -3120,6 +3126,16 @@ Hook environment:
 Cleanup environment:
   DOTTY_CLEANUP_ID         Cleanup task id
   DOTTY_CLEANUP_STATE_DIR  Local state directory for the cleanup task
+
+Managed checkout install environment:
+  DOTTY_MANAGED_CHECKOUT_NAME
+                           Stable checkout name
+  DOTTY_MANAGED_CHECKOUT_DIR
+                           Resolved checkout target path
+  DOTTY_MANAGED_CHECKOUT_REPO_URL
+                           Git remote URL from the manifest row
+  DOTTY_MANAGED_CHECKOUT_BRANCH
+                           Branch from the manifest row
 
 Repo command environment:
   DOTTY_COMMAND            "run" while executing a repo-defined command

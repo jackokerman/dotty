@@ -171,7 +171,7 @@ write_manifest() {
     [[ "$output" == *"malformed managed checkout row; skipping"* ]]
 }
 
-@test "checkouts runs repo and dotty install actions from the correct working directories" {
+@test "checkouts runs repo and dotty install actions with metadata env" {
     create_git_remote "repo-install"
     local repo_url="$REPLY"
     local repo_work="$REPLY_WORK"
@@ -179,7 +179,13 @@ write_manifest() {
     cat > "$repo_work/scripts/install-record" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-pwd > "$TEST_HOME/repo-install-pwd"
+{
+    pwd
+    printf '%s\n' "\$DOTTY_MANAGED_CHECKOUT_NAME"
+    printf '%s\n' "\$DOTTY_MANAGED_CHECKOUT_DIR"
+    printf '%s\n' "\$DOTTY_MANAGED_CHECKOUT_REPO_URL"
+    printf '%s\n' "\$DOTTY_MANAGED_CHECKOUT_BRANCH"
+} > "$TEST_HOME/repo-install-record"
 EOF
     chmod +x "$repo_work/scripts/install-record"
     git -C "$repo_work" add scripts/install-record
@@ -198,7 +204,13 @@ EOF
     cat > "$repo_dir/scripts/install-record" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-pwd > "$TEST_HOME/dotty-install-pwd"
+{
+    pwd
+    printf '%s\n' "\$DOTTY_MANAGED_CHECKOUT_NAME"
+    printf '%s\n' "\$DOTTY_MANAGED_CHECKOUT_DIR"
+    printf '%s\n' "\$DOTTY_MANAGED_CHECKOUT_REPO_URL"
+    printf '%s\n' "\$DOTTY_MANAGED_CHECKOUT_BRANCH"
+} > "$TEST_HOME/dotty-install-record"
 EOF
     chmod +x "$repo_dir/scripts/install-record"
     write_manifest "$repo_dir" \
@@ -209,8 +221,8 @@ EOF
     run cmd_checkouts
 
     [[ "$status" -eq 0 ]]
-    [[ "$(cat "$TEST_HOME/repo-install-pwd")" == "$TEST_HOME/src/repo-install" ]]
-    [[ "$(cat "$TEST_HOME/dotty-install-pwd")" == "$repo_dir" ]]
+    [[ "$(cat "$TEST_HOME/repo-install-record")" == "$TEST_HOME/src/repo-install"$'\n'"repo-install"$'\n'"$TEST_HOME/src/repo-install"$'\n'"$repo_url"$'\n'"main" ]]
+    [[ "$(cat "$TEST_HOME/dotty-install-record")" == "$repo_dir"$'\n'"dotty-install"$'\n'"$TEST_HOME/src/dotty-install"$'\n'"$dotty_url"$'\n'"main" ]]
 }
 
 @test "checkouts reports installer failures but continues remaining rows" {

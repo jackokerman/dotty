@@ -510,6 +510,13 @@ Fields:
 
 Dotty clones missing checkouts, fetches and fast-forwards clean matching checkouts, and skips unsafe rows with warnings. It skips dirty, wrong-branch, wrong-origin, non-Git, diverged, malformed, or unsupported rows. Git operations run with interactive prompts disabled. Install actions run only after checkout sync succeeds; an install action failure is reported as an operation failure while remaining rows are still inspected.
 
+Install actions receive metadata for the managed checkout row:
+
+- `DOTTY_MANAGED_CHECKOUT_NAME` — stable checkout name
+- `DOTTY_MANAGED_CHECKOUT_DIR` — resolved checkout target path
+- `DOTTY_MANAGED_CHECKOUT_REPO_URL` — Git remote URL from the manifest row
+- `DOTTY_MANAGED_CHECKOUT_BRANCH` — branch from the manifest row
+
 ## Hooks
 
 If a repo has an executable hook script at `.dotty/run.sh`, dotty runs it after creating symlinks during `install` and `update` (but not `link`). These environment variables are available:
