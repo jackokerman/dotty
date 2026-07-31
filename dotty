@@ -36,16 +36,27 @@ registry_get() {
 registry_set() {
     local name="$1"
     local path="$2"
+    local tmp="$DOTTY_REGISTRY.tmp"
+    local found=false
+    local line
 
-    if grep -q "^${name}=" "$DOTTY_REGISTRY" 2>/dev/null; then
-        # Update existing entry (portable sed)
-        local tmp="$DOTTY_REGISTRY.tmp"
-        grep -v "^${name}=" "$DOTTY_REGISTRY" > "$tmp" || true
-        echo "${name}=${path}" >> "$tmp"
-        mv "$tmp" "$DOTTY_REGISTRY"
-    else
-        echo "${name}=${path}" >> "$DOTTY_REGISTRY"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "${line%%=*}" == "$name" ]]; then
+            if [[ "$found" == false ]]; then
+                printf '%s=%s\n' "$name" "$path"
+                found=true
+            fi
+            continue
+        fi
+
+        printf '%s\n' "$line"
+    done < "$DOTTY_REGISTRY" > "$tmp"
+
+    if [[ "$found" == false ]]; then
+        printf '%s=%s\n' "$name" "$path" >> "$tmp"
     fi
+
+    mv "$tmp" "$DOTTY_REGISTRY"
 }
 
 registry_remove() {

@@ -1,10 +1,10 @@
 ---
 id: 2026-07-08-preserve-dotty-registry-order-on-register
 title: Preserve Dotty registry order on register
-state: ready-to-implement
+state: complete
 priority: high
 createdAt: 2026-07-08T22:52:58.405Z
-updatedAt: 2026-07-31T21:52:12.277Z
+updatedAt: 2026-07-31T22:02:40.810Z
 ---
 
 # Preserve Dotty registry order on register
@@ -57,4 +57,10 @@ Stop after the focused test passes if the implementation reveals that registry o
 
 ## Agent handoff
 
-This follow-up came from consolidating a duplicate base dotfiles checkout on one machine. The local repair was completed manually: the registry path was changed to the visible checkout, stale cleanup state was repaired, the hidden clone was removed, and `dotty update` passed afterward. The durable Dotty issue is only the order-preservation behavior in `register` / `registry_set`.
+Implemented the scoped registry-order fix in `dotty` and focused coverage in `test/registry.bats`.
+
+`registry_set` now rewrites the registry through its existing temporary file in one ordered pass, compares the field before the first `=` with Bash string equality, replaces the first matching row in place, skips later duplicates, and appends only when no row matched.
+
+Verification passed: focused registry tests (11 tests), `bash -n dotty`, the full Bats suite, and `git diff --check`.
+
+Current stopping point: implementation is code-complete and uncommitted pending user review. Only `dotty` and `test/registry.bats` are modified. No commit, push, or lifecycle transition has occurred.

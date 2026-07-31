@@ -11,11 +11,15 @@ teardown() {
     teardown_test_env
 }
 
-@test "registry_set adds a new entry" {
+@test "registry_set appends a new entry" {
+    echo "existing=/path/to/existing" > "$TEST_REGISTRY"
+
     registry_set "my-repo" "/path/to/repo"
-    run grep "^my-repo=" "$TEST_REGISTRY"
+
+    run diff -u <(printf '%s\n' \
+        "existing=/path/to/existing" \
+        "my-repo=/path/to/repo") "$TEST_REGISTRY"
     [[ "$status" -eq 0 ]]
-    [[ "$output" == "my-repo=/path/to/repo" ]]
 }
 
 @test "registry_get retrieves an existing entry" {
@@ -44,16 +48,47 @@ teardown() {
     [[ "$count" -eq 1 ]]
 }
 
-@test "registry_set preserves other entries when updating" {
+@test "registry_set preserves order when updating the first entry" {
     echo "repo-a=/path/a" > "$TEST_REGISTRY"
     echo "repo-b=/path/b" >> "$TEST_REGISTRY"
+    echo "repo-c=/path/c" >> "$TEST_REGISTRY"
 
     registry_set "repo-a" "/new/path/a"
 
-    run registry_get "repo-a"
-    [[ "$output" == "/new/path/a" ]]
-    run registry_get "repo-b"
-    [[ "$output" == "/path/b" ]]
+    run diff -u <(printf '%s\n' \
+        "repo-a=/new/path/a" \
+        "repo-b=/path/b" \
+        "repo-c=/path/c") "$TEST_REGISTRY"
+    [[ "$status" -eq 0 ]]
+}
+
+@test "registry_set preserves order when updating a middle entry" {
+    echo "repo-a=/path/a" > "$TEST_REGISTRY"
+    echo "repo-b=/path/b" >> "$TEST_REGISTRY"
+    echo "repo-c=/path/c" >> "$TEST_REGISTRY"
+
+    registry_set "repo-b" "/new/path/b"
+
+    run diff -u <(printf '%s\n' \
+        "repo-a=/path/a" \
+        "repo-b=/new/path/b" \
+        "repo-c=/path/c") "$TEST_REGISTRY"
+    [[ "$status" -eq 0 ]]
+}
+
+@test "registry_set collapses duplicate entries at the first match" {
+    echo "repo-a=/path/a" > "$TEST_REGISTRY"
+    echo "repo-b=/old/path/b" >> "$TEST_REGISTRY"
+    echo "repo-c=/path/c" >> "$TEST_REGISTRY"
+    echo "repo-b=/duplicate/path/b" >> "$TEST_REGISTRY"
+
+    registry_set "repo-b" "/new/path/b"
+
+    run diff -u <(printf '%s\n' \
+        "repo-a=/path/a" \
+        "repo-b=/new/path/b" \
+        "repo-c=/path/c") "$TEST_REGISTRY"
+    [[ "$status" -eq 0 ]]
 }
 
 @test "registry_remove deletes an entry" {
