@@ -1,10 +1,10 @@
 ---
 id: 2026-06-25-investigate-serial-update-dry-run-cost
 title: Investigate serial update dry-run cost
-state: ready-to-implement
+state: complete
 priority: normal
 createdAt: 2026-06-25T17:26:19.694Z
-updatedAt: 2026-07-31T22:28:15.826Z
+updatedAt: 2026-07-31T22:51:42.477Z
 ---
 
 # Investigate serial update dry-run cost
@@ -77,6 +77,40 @@ Treat a bottleneck as actionable only when repeated phase timings and fixture sc
 
 ## Agent handoff
 
-The user approved the persisted investigation contract on 2026-07-31, and the plan is now `ready-to-implement`.
+## Outcome
 
-A fresh implementation session should execute the measurement contract only. Start with repeated warm baselines and phase attribution, test the subprocess-heavy traversal hypothesis against scaling fixtures, and capture a separate focused product-change plan only if the evidence meets the decision bar. Do not optimize opportunistically or run a real update for profiling.
+Completed the approved read-only investigation. No product code changed and no real update was run for profiling.
+
+### Active-chain baselines
+
+Five initial runs showed a repeatable first-run cold-cache penalty, followed by stable warm results.
+
+- `dotty status` warm runs: 7.07s, 6.94s, 6.91s, 7.27s wall; median 7.01s, range 6.91–7.27s. Median user/sys were about 1.23s/1.89s.
+- `dotty --dry-run update` warm runs: 12.88s, 13.15s, 13.40s, 12.95s wall; median 13.05s, range 12.88–13.40s. Median user/sys were about 2.43s/4.23s.
+
+A final uninstrumented rerun after all attribution work reproduced warm results at 6.82s and 6.70s for status and 11.92s and 11.98s for dry-run update. First runs after switching workloads remained about 2–5 seconds colder, consistent with the earlier cache effect.
+
+### Phase attribution and subprocesses
+
+- Status: chain resolution about 0.03s, environment detection under 0.004s, warm Git dirty checks about 0.12s, and `_files_walk` about 7.03s. Fresh xtrace counted 231 `git check-ignore`, 247 `basename`, 243 `dirname`, and 138 `readlink` subprocesses.
+- Dry-run update: self-update plus chain resolution about 0.03–0.07s, environment detection under 0.003s, registry refresh about 0.01s, managed-checkout inspection 0.39–0.89s warm, orphan cleanup about 4.65s, link traversal about 7.33s, and pending cleanup discovery about 0.08s. Fresh xtrace counted 220 `git check-ignore`, 1,512 `basename`, 221 `dirname`, 453 `readlink`, 131 orphan-recursion steps, and 218 link-item steps.
+
+### Fixture scaling
+
+Temporary two-repo fixtures used isolated `HOME` and `DOTTY_DIR` state and included nested `.gitignore` rules, ignored directories, hidden files, and an environment-overlay conflict that forced a real merged directory.
+
+- 39 entries / 29 leaves: warm status 1.14s; dry-run update median 1.61s.
+- 135 entries / 109 leaves: warm status 3.97s; dry-run update median 5.81s.
+- 495 entries / 409 leaves: warm status values 14.22s, 14.83s, and 14.29s; dry-run update median 22.54s.
+
+The near-linear growth agrees with the per-entry subprocess attribution.
+
+### Decision
+
+The shared per-entry `_is_gitignored` boundary is actionable. A temporary upper-bound override that only made `_is_gitignored` return false reduced warm status from a 7.01s median to 1.89s and warm dry-run update from 13.05s to 7.10s. This isolates roughly 5–6 seconds of avoidable wall time per command. The override was measurement-only and is not a valid implementation because it deliberately bypasses ignore semantics.
+
+Captured focused follow-up `2026-07-31-batch-git-ignore-checks-during-dotty-traversal`. It scopes a bounded/batched ignore-classification change across `_files_walk` and `create_symlinks_from_dir`, preserves nested ignore, hidden-file, link-ignore, overlay, status-count, and dry-run boundaries, and explicitly excludes orphan-cleanup optimization.
+
+## Next step
+
+User review of this investigation packet. After approval, complete the investigation lifecycle and persist the plan artifacts according to the repo workflow; implementation belongs to the captured follow-up plan.
