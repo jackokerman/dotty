@@ -1,9 +1,9 @@
 ---
 id: 2026-07-31-batch-git-ignore-checks-during-dotty-traversal
 title: Batch Git ignore checks during Dotty traversal
-state: ready-to-ship
+state: complete
 createdAt: 2026-07-31T22:45:29.537Z
-updatedAt: 2026-07-31T23:27:31.569Z
+updatedAt: 2026-07-31T23:27:56.612Z
 sourcePlan: 2026-06-25-investigate-serial-update-dry-run-cost
 ---
 
@@ -81,8 +81,8 @@ Before implementation, review this persisted contract and explicitly approve mar
 
 ## Agent handoff
 
-Implemented the approved batching boundary and stopped at the user-review gate. `lib/utils.sh` now prepares one NUL-delimited `git ls-files --others --ignored --exclude-standard --directory` snapshot per top-level source tree, normalizes collapsed-directory records, and performs Bash 3.2-compatible exact lookups. Link traversal and `_files_walk` refresh only at their outermost call and reuse the shared snapshot recursively. Added focused coverage for ignored directories, negation, tracked descendants, shared status/files semantics, one enumeration per tree, and absence of per-entry `git check-ignore`.
+Implementation reviewed and approved by the user, committed as `ea2dc8b` (`perf: batch git ignore checks`), and pushed to `origin/main`.
 
-Verification passed: focused symlink/commands/dry-run tests, full Bats suite, `git diff --check`, and `/bin/bash` 3.2 syntax checks. Active-chain warm medians improved from 7.01s to 2.03s for status and from 13.05s to 7.69s for dry-run update. A fresh 495-entry two-repo fixture measured 4.12s status and 9.88s dry-run medians versus recorded 14.29s and 22.54s baselines. Timing runs did not change product state.
+The shared batched ignore snapshot is complete. Focused and full verification passed, Bash 3.2 compatibility was confirmed, and both active-chain and 495-entry fixture performance exceeded the required 30% improvement.
 
-Next honest step: user review of the implementation packet. Do not commit, push, or transition lifecycle state until explicit approval.
+Lightweight improvement audit found no repeated process friction, missing follow-through, safety/routing risk, or separate durable work worth capturing.
