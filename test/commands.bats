@@ -99,6 +99,14 @@ EOF
     mkdir -p "$TEST_HOME/.config/app"
     create_symlinks_from_dir "$repo_dir/home" "$TEST_HOME"
 
+    local git_log="$TEST_HOME/git.log"
+    git() {
+        if [[ "$*" == *"ls-files"* || "$*" == *"check-ignore"* ]]; then
+            printf '%s\n' "$*" >> "$git_log"
+        fi
+        command git "$@"
+    }
+
     run cmd_files
     [[ "$status" -eq 0 ]]
     [[ "$output" == *"config.toml"* ]]
@@ -106,11 +114,18 @@ EOF
     [[ "$output" != *".zcompdump"* ]]
     local files_output="$output"
     [[ "$files_output" != *"not linked"* ]]
+    [[ "$(wc -l < "$git_log" | tr -d ' ')" -eq 1 ]]
+    [[ "$(cat "$git_log")" == *"ls-files"* ]]
+    [[ "$(cat "$git_log")" != *"check-ignore"* ]]
 
+    : > "$git_log"
     run cmd_status
     [[ "$status" -eq 0 ]]
     [[ "$output" == *"[1 linked]"* ]]
     [[ "$output" != *"unlinked"* ]]
+    [[ "$(wc -l < "$git_log" | tr -d ' ')" -eq 1 ]]
+    [[ "$(cat "$git_log")" == *"ls-files"* ]]
+    [[ "$(cat "$git_log")" != *"check-ignore"* ]]
 }
 
 @test "cmd_commands lists resolved repo-defined commands after overlay resolution" {

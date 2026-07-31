@@ -44,6 +44,8 @@ DOTTY_VERBOSE="${DOTTY_VERBOSE:-false}"
 _SKIP_COUNT="${_SKIP_COUNT:-0}"
 _LINK_FAIL_COUNT="${_LINK_FAIL_COUNT:-0}"
 _LINK_DEPTH="${_LINK_DEPTH:-0}"
+_FILES_WALK_DEPTH="${_FILES_WALK_DEPTH:-0}"
+_GITIGNORED_PATHS=()
 
 EXCLUDE_PATTERNS=(
     .git .gitignore .gitmodules
@@ -69,9 +71,25 @@ _is_link_ignored() {
     return 1
 }
 
+_refresh_gitignored_paths() {
+    local source_root="$1"
+    local ignored_path
+
+    _GITIGNORED_PATHS=()
+    while IFS= read -r -d '' ignored_path; do
+        ignored_path="${ignored_path%/}"
+        _GITIGNORED_PATHS+=("${source_root%/}/$ignored_path")
+    done < <(git -C "$source_root" ls-files -z --others --ignored --exclude-standard --directory -- . 2>/dev/null)
+}
+
 _is_gitignored() {
     local file="$1"
-    git -C "$(dirname "$file")" check-ignore -q "$file" 2>/dev/null
+    local ignored_path
+
+    for ignored_path in ${_GITIGNORED_PATHS[@]+"${_GITIGNORED_PATHS[@]}"}; do
+        [[ "$file" == "$ignored_path" ]] && return 0
+    done
+    return 1
 }
 
 # Remove symlinks in target_dir that point into source_dir but whose source
@@ -302,6 +320,7 @@ create_symlinks_from_dir() {
     _LINK_DEPTH=$((_LINK_DEPTH + 1))
     if [[ $_LINK_DEPTH -eq 1 ]]; then
         _SKIP_COUNT=0
+        _refresh_gitignored_paths "$source_dir"
     fi
 
     mkdir -p "$target_dir"

@@ -194,6 +194,60 @@ teardown() {
     [[ ! -L "$TEST_HOME/.config/zsh/.zsh_history" ]]
 }
 
+@test "create_symlinks_from_dir preserves git ignore directory and negation semantics" {
+    create_test_repo "test-repo"
+    local repo_dir="$REPLY"
+
+    git -C "$repo_dir" init -q
+    mkdir -p "$repo_dir/home/cache" "$repo_dir/home/generated"
+    echo "tracked" > "$repo_dir/home/cache/tracked.txt"
+    git -C "$repo_dir" add home/cache/tracked.txt
+    cat > "$repo_dir/home/.gitignore" <<'EOF'
+cache/
+generated/
+*.tmp
+!keep.tmp
+EOF
+    echo "ignored" > "$repo_dir/home/cache/ignored.txt"
+    echo "ignored" > "$repo_dir/home/generated/output.txt"
+    echo "ignored" > "$repo_dir/home/drop.tmp"
+    echo "kept" > "$repo_dir/home/keep.tmp"
+
+    mkdir -p "$TEST_HOME/cache" "$TEST_HOME/generated"
+    create_symlinks_from_dir "$repo_dir/home" "$TEST_HOME"
+
+    [[ -L "$TEST_HOME/cache/tracked.txt" ]]
+    [[ ! -L "$TEST_HOME/cache/ignored.txt" ]]
+    [[ ! -L "$TEST_HOME/generated/output.txt" ]]
+    [[ ! -L "$TEST_HOME/drop.tmp" ]]
+    [[ -L "$TEST_HOME/keep.tmp" ]]
+}
+
+@test "create_symlinks_from_dir enumerates gitignored paths once per source tree" {
+    create_test_repo "test-repo"
+    local repo_dir="$REPLY"
+    local git_log="$TEST_HOME/git.log"
+
+    git -C "$repo_dir" init -q
+    add_repo_file "$repo_dir" ".config/app/one.txt" "one"
+    add_repo_file "$repo_dir" ".config/app/two.txt" "two"
+    add_repo_file "$repo_dir" ".local/share/three.txt" "three"
+    mkdir -p "$TEST_HOME/.config/app" "$TEST_HOME/.local/share"
+
+    git() {
+        if [[ "$*" == *"ls-files"* || "$*" == *"check-ignore"* ]]; then
+            printf '%s\n' "$*" >> "$git_log"
+        fi
+        command git "$@"
+    }
+
+    create_symlinks_from_dir "$repo_dir/home" "$TEST_HOME"
+
+    [[ "$(wc -l < "$git_log" | tr -d ' ')" -eq 1 ]]
+    [[ "$(cat "$git_log")" == *"ls-files"* ]]
+    [[ "$(cat "$git_log")" != *"check-ignore"* ]]
+}
+
 @test "create_symlinks_from_dir links all files when repo has no git dir" {
     create_test_repo "test-repo"
     local repo_dir="$REPLY"

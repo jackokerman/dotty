@@ -2716,6 +2716,11 @@ _files_walk() {
 
     [[ -d "$source_dir" ]] || return 0
 
+    _FILES_WALK_DEPTH=$((_FILES_WALK_DEPTH + 1))
+    if [[ $_FILES_WALK_DEPTH -eq 1 ]]; then
+        _refresh_gitignored_paths "$source_dir"
+    fi
+
     local item
     for item in "$source_dir"/* "$source_dir"/.*; do
         [[ -e "$item" ]] || continue
@@ -2738,6 +2743,8 @@ _files_walk() {
             _FILE_LINES+=("$status|$rel|$repo_name")
         fi
     done
+
+    _FILES_WALK_DEPTH=$((_FILES_WALK_DEPTH - 1))
 }
 
 cmd_files() {
