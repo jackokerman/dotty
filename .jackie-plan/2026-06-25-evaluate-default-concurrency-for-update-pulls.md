@@ -1,30 +1,37 @@
 ---
 id: 2026-06-25-evaluate-default-concurrency-for-update-pulls
 title: Evaluate default concurrency for update pulls
-state: inbox
+state: paused
 createdAt: 2026-06-25T17:25:45.357Z
-updatedAt: 2026-06-25T17:25:45.357Z
+updatedAt: 2026-07-31T21:48:38.312Z
 ---
 
 # Evaluate default concurrency for update pulls
 
 ## Plan
 
-## Related plan
+## Objective
 
-Source plan: `2026-06-25-plan-dotty-update-parallelization`.
+Decide whether full-chain `dotty update` should keep serial pulls by default or use a small bounded `DOTTY_UPDATE_JOBS` default.
 
-## Why
+## Current state
 
-The first parallel update implementation should ship as opt-in through `DOTTY_UPDATE_JOBS`, defaulting to serial behavior. After it is available, revisit whether dotty should choose a small automatic default such as `4`.
+Opt-in parallel pulls shipped with `DOTTY_UPDATE_JOBS`, defaulting to `1`. Pulls are the only parallelized stage; linking, cleanups, hooks, install, dry-run, self-update, and targeted updates remain serial.
 
-## Trigger
+There is not yet durable before/after evidence from both a short chain and a longer or slower chain. The original two-repo design measurement showed only a modest and noisy improvement, so changing the public default now would be guesswork.
 
-Pick this up after the opt-in parallel pull implementation has been used on real chains for a bit.
+## Resume trigger
 
-## Acceptance criteria
+Resume only after normal usage or a deliberate benchmark can provide repeatable timings for jobs `1`, `2`, and `4` on at least two materially different chains.
 
-- Gather before/after timings for `dotty update` with `DOTTY_UPDATE_JOBS=1`, `2`, and `4` on at least one short chain and one longer or slower chain if available.
-- Separate pull time from serial link, cleanup, and hook time so the decision is not based on total runtime alone.
-- Decide whether to keep the feature opt-in, document a recommended env var, or make a bounded parallel default.
-- If a default greater than `1` is selected, update docs and tests in the implementation change.
+## Decision contract
+
+When resumed:
+
+- measure pull time separately from serial processing time;
+- use repeated runs rather than a single timing;
+- record chain size and whether remotes were already warm;
+- keep the default at `1` unless a higher value produces a consistent material improvement without confusing output or remote pressure;
+- if the default changes, update README/help and focused update-parallel tests in the same change.
+
+Do not add a CLI flag or automatic CPU-based tuning.

@@ -1,9 +1,9 @@
 ---
 id: 2026-06-25-improve-dotty-repo-command-discoverability
 title: Improve Dotty repo-command discoverability
-state: inbox
+state: complete
 createdAt: 2026-06-25T03:23:22.317Z
-updatedAt: 2026-06-25T03:23:22.317Z
+updatedAt: 2026-07-31T21:48:38.272Z
 sourcePlan: 2026-06-25-build-preferred-personal-tooling-stack
 ---
 
@@ -11,13 +11,20 @@ sourcePlan: 2026-06-25-build-preferred-personal-tooling-stack
 
 ## Plan
 
-# Improve Dotty repo-command discoverability
+## Decision
 
-Dotty already ships zsh completions for repo-defined commands: `dotty run <TAB>` calls `dotty commands` and completes command names from the active chain. The commands are not sourced and are not installed into `bin`; `dotty run <name>` dispatches executable files from `.dotty/commands/` with Dotty context env vars.
+No Dotty change is currently warranted.
 
-Follow up only if the current discoverability still feels weak after using it:
+## Verified current behavior
 
-- Verify `dotty run <TAB>` works on personal and work machines after `dotty update`; use `reload-completions` if the shell cache is stale.
-- Consider adding richer descriptions for repo-defined commands, either by extending `dotty commands` output or supporting optional command metadata.
-- Consider documenting `dotty commands` and `dotty run <TAB>` more prominently in dotfiles new-machine/daily-use docs if it remains easy to forget.
-- Avoid putting repo commands directly on `PATH` unless a command is genuinely a daily CLI; keep one-off maintenance commands behind `dotty run`.
+- `dotty commands` lists the active chain's repo-defined commands and owning repos.
+- `dotty run <name>` has dedicated README command documentation and a full repo-command contract section.
+- zsh completion for `dotty run <TAB>` calls `dotty commands` and completes stable command names.
+- the installed completion file is linked into the standard site-functions directory on the audited machine.
+- the active chain currently exposes multiple commands successfully through this surface.
+
+The original plan explicitly said to follow up only if discoverability still felt weak after use. No concrete completion failure, confusing case, or repeated discovery problem has been captured. Adding command metadata or putting maintenance commands on `PATH` would be speculative.
+
+## Outcome
+
+Keep the existing command surface and documentation. Reopen with a concrete reproduction if completion fails after `dotty update`, users cannot find `dotty commands`, or stable command descriptions become necessary for a demonstrated picker or help workflow.

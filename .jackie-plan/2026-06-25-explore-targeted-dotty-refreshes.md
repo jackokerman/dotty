@@ -1,9 +1,9 @@
 ---
 id: 2026-06-25-explore-targeted-dotty-refreshes
 title: Explore targeted Dotty refreshes
-state: ready-to-implement
+state: complete
 createdAt: 2026-06-25T18:28:43.071Z
-updatedAt: 2026-06-30T01:16:14.296Z
+updatedAt: 2026-07-31T21:48:38.107Z
 ---
 
 # Explore targeted Dotty refreshes
