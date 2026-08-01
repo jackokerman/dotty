@@ -282,7 +282,7 @@ _reset_cleanup_config_state() {
     local var
     while IFS= read -r var; do
         case "$var" in
-            DOTTY_CLEANUP_ENVIRONMENTS|DOTTY_CLEANUP_MACHINES|DOTTY_CLEANUP_DESCRIPTION)
+            DOTTY_CLEANUP_ENVIRONMENTS|DOTTY_CLEANUP_MACHINES|DOTTY_CLEANUP_DESCRIPTION|DOTTY_CLEANUP_RETIRE_AFTER)
                 ;;
             *)
                 unset "$var"
@@ -293,6 +293,36 @@ _reset_cleanup_config_state() {
     DOTTY_CLEANUP_ENVIRONMENTS=()
     DOTTY_CLEANUP_MACHINES=()
     DOTTY_CLEANUP_DESCRIPTION=""
+    DOTTY_CLEANUP_RETIRE_AFTER=""
+    export -n DOTTY_CLEANUP_RETIRE_AFTER
+}
+
+_is_valid_calendar_date() {
+    local value="$1"
+    [[ "$value" =~ ^([0-9]{4})-([0-9]{2})-([0-9]{2})$ ]] || return 1
+
+    local year=$((10#${BASH_REMATCH[1]}))
+    local month=$((10#${BASH_REMATCH[2]}))
+    local day=$((10#${BASH_REMATCH[3]}))
+    (( year > 0 && month >= 1 && month <= 12 && day >= 1 )) || return 1
+
+    local days_in_month
+    case "$month" in
+        2)
+            days_in_month=28
+            if (( year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) )); then
+                days_in_month=29
+            fi
+            ;;
+        4|6|9|11)
+            days_in_month=30
+            ;;
+        *)
+            days_in_month=31
+            ;;
+    esac
+
+    (( day <= days_in_month ))
 }
 
 _load_cleanup_config_file() {
@@ -310,7 +340,7 @@ _load_cleanup_config_file() {
     local var
     while IFS= read -r var; do
         case "$var" in
-            DOTTY_CLEANUP_ENVIRONMENTS|DOTTY_CLEANUP_MACHINES|DOTTY_CLEANUP_DESCRIPTION)
+            DOTTY_CLEANUP_ENVIRONMENTS|DOTTY_CLEANUP_MACHINES|DOTTY_CLEANUP_DESCRIPTION|DOTTY_CLEANUP_RETIRE_AFTER)
                 ;;
             *)
                 _CLEANUP_CONFIG_LOAD_ERROR="Unsupported cleanup config variable: $var"
@@ -318,6 +348,20 @@ _load_cleanup_config_file() {
                 ;;
         esac
     done < <(compgen -A variable DOTTY_CLEANUP_ || true)
+
+    export -n DOTTY_CLEANUP_RETIRE_AFTER
+
+    local retire_after_declaration
+    retire_after_declaration="$(declare -p DOTTY_CLEANUP_RETIRE_AFTER)"
+    if [[ "$retire_after_declaration" == "declare -a"* || "$retire_after_declaration" == "declare -A"* ]]; then
+        _CLEANUP_CONFIG_LOAD_ERROR="DOTTY_CLEANUP_RETIRE_AFTER must be a scalar YYYY-MM-DD date"
+        return 1
+    fi
+
+    if [[ -n "$DOTTY_CLEANUP_RETIRE_AFTER" ]] && ! _is_valid_calendar_date "$DOTTY_CLEANUP_RETIRE_AFTER"; then
+        _CLEANUP_CONFIG_LOAD_ERROR="DOTTY_CLEANUP_RETIRE_AFTER must be a valid YYYY-MM-DD date: $DOTTY_CLEANUP_RETIRE_AFTER"
+        return 1
+    fi
 }
 
 # Sets: DOTTY_NAME, DOTTY_EXTENDS, DOTTY_ENVIRONMENTS, DOTTY_ENV_DETECT
@@ -1821,6 +1865,7 @@ cmd_link() {
 }
 
 cmd_cleanups() {
+    local LC_ALL=C
     local include_all=false
     local pending_only=false
 
@@ -1849,6 +1894,9 @@ cmd_cleanups() {
     local machine_id=""
     machine_id="$(_current_machine_id 2>/dev/null)" || true
 
+    local current_utc_date
+    current_utc_date="$(date -u '+%Y-%m-%d')"
+
     title "dotty cleanups"
     if [[ -n "$env" ]]; then
         echo -e "Env:     ${COLOR_GREEN}$env${COLOR_NONE}"
@@ -1858,6 +1906,7 @@ cmd_cleanups() {
     fi
 
     local printed_any=false
+    local printed_retirement_due=false
     local i
     for (( i=0; i<${#CHAIN_PATHS[@]}; i++ )); do
         local repo_name="${CHAIN_NAMES[$i]}"
@@ -1900,6 +1949,10 @@ cmd_cleanups() {
                 status="not applicable"
             fi
 
+            if [[ "$status" == "done" && -n "$DOTTY_CLEANUP_RETIRE_AFTER" && "$DOTTY_CLEANUP_RETIRE_AFTER" < "$current_utc_date" ]]; then
+                status="retire"
+            fi
+
             if [[ "$pending_only" == "true" && "$status" != "pending" ]]; then
                 continue
             fi
@@ -1910,6 +1963,10 @@ cmd_cleanups() {
             fi
             if [[ -n "$reason" && "$status" == "not applicable" ]]; then
                 line+=" ($reason)"
+            fi
+            if [[ "$status" == "retire" ]]; then
+                line+=" (after $DOTTY_CLEANUP_RETIRE_AFTER)"
+                printed_retirement_due=true
             fi
             lines+=("$line")
         done
@@ -1926,6 +1983,11 @@ cmd_cleanups() {
 
     if [[ "$printed_any" == "false" ]]; then
         info "No cleanup tasks found."
+    fi
+
+    if [[ "$printed_retirement_due" == "true" ]]; then
+        echo ""
+        info "Retirement dates are advisory and completion is local. Remove retire-marked tasks from their repo when you accept that other machines may not have run them."
     fi
 }
 
@@ -3095,7 +3157,7 @@ Commands:
   checkouts                Sync managed checkouts from the active chain
   commands                 List repo-defined commands from the active chain
   run <name> [args]        Run a repo-defined command from .dotty/commands/
-  cleanups [opts]          List one-shot cleanup task state
+  cleanups [opts]          List one-shot cleanup state and retirement guidance
   self-update              Update dotty itself
   add <file> [--repo X]    Move a dotfile into a repo and symlink it back
   link [name]              Re-create symlinks only (skip pull and hooks)

@@ -591,9 +591,18 @@ Optional `config` files are Bash and support these metadata variables:
 DOTTY_CLEANUP_ENVIRONMENTS=("laptop" "remote")
 DOTTY_CLEANUP_MACHINES=("work-laptop")
 DOTTY_CLEANUP_DESCRIPTION="Remove old tool state"
+DOTTY_CLEANUP_RETIRE_AFTER="2026-09-01"
 ```
 
 `DOTTY_CLEANUP_MACHINES` matches `DOTTY_MACHINE_ID`, falling back to the first line of `~/.dotty/machine-id`. If no machine id is available, machine-scoped cleanups are skipped as not applicable.
+
+`DOTTY_CLEANUP_RETIRE_AFTER` is an optional advisory UTC calendar date in `YYYY-MM-DD` form. It is available only to directory-shaped tasks with a `config` file. After that date—not on the date itself—`dotty cleanups` marks an applicable, locally completed task as ready to retire:
+
+```text
+  retire  2026-remove-old-tool  Remove old tool state (after 2026-09-01)
+```
+
+The date does not disable the task or claim that it ran on every machine. Pending tasks still run and failed tasks still retry after the date. Dotty never removes or edits cleanup definitions automatically.
 
 Cleanup scripts run from the repo root and receive the hook environment plus:
 
@@ -612,7 +621,7 @@ rm -rf "$HOME/.config/old-tool"
 rm -f "$HOME/.local/bin/old-tool"
 ```
 
-After this cleanup has propagated and `dotty cleanups` shows it as done where you care, remove the cleanup file from the repo in a later commit.
+After `dotty cleanups` marks a task `retire`, decide whether its local completion is sufficient for the machines you maintain. Remove the cleanup definition from its source repo manually, then commit and push that removal through the repo's normal workflow. Machines that never ran the task will not run it after the definition is removed.
 
 ## Repo-Defined Commands
 

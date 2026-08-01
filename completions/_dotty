@@ -26,7 +26,7 @@ _dotty() {
         'checkouts:Sync managed checkouts from the active chain'
         'commands:List repo-defined commands from the active chain'
         'run:Run a repo-defined command from .dotty/commands/'
-        'cleanups:List one-shot cleanup task state'
+        'cleanups:List one-shot cleanup state and retirement guidance'
         'self-update:Update dotty itself'
         'add:Move a dotfile into a repo and symlink it back'
         'link:Re-create symlinks only (skip pull and hooks)'

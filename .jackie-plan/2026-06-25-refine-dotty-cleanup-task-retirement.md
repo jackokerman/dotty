@@ -1,9 +1,9 @@
 ---
 id: 2026-06-25-refine-dotty-cleanup-task-retirement
 title: Add advisory cleanup retirement dates
-state: ready-to-implement
+state: complete
 createdAt: 2026-06-25T16:35:56.708Z
-updatedAt: 2026-08-01T00:10:18.760Z
+updatedAt: 2026-08-01T00:19:33.927Z
 ---
 
 # Add advisory cleanup retirement dates
@@ -143,4 +143,11 @@ Use `$jp:implement` or another explicit implementation request to implement the 
 
 ## Agent handoff
 
-The advisory retirement-date contract is approved, `ready-to-implement`, and persisted on `main`. It specifies optional `DOTTY_CLEANUP_RETIRE_AFTER="YYYY-MM-DD"` metadata, UTC advisory status rendering, unchanged pending/failed execution, no automatic repo mutation, portable calendar validation, synchronized docs/help/completions, and focused Bats coverage. No implementation has started. The next authorized workflow is `$jp:implement` or another explicit implementation request.
+Implemented advisory cleanup retirement dates through the review boundary.
+
+- Added strict portable calendar validation and scalar `DOTTY_CLEANUP_RETIRE_AFTER` config handling.
+- Kept retirement metadata out of cleanup script environments and left pending/failed execution unchanged.
+- Rendered only overdue, applicable, locally completed tasks as `retire`, with one advisory footer.
+- Updated CLI help, zsh completion text, README guidance, and focused Bats coverage.
+- Verification passed: `bash -n dotty`, focused `test/cleanups.bats`, full `test/`, and `git diff --check`.
+- Current state is code-complete but unreviewed. Next step is user review; do not commit, push, or transition lifecycle state without explicit approval.
