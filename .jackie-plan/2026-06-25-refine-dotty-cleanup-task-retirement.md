@@ -1,76 +1,146 @@
 ---
 id: 2026-06-25-refine-dotty-cleanup-task-retirement
-title: Refine dotty cleanup task retirement
-state: inbox
+title: Add advisory cleanup retirement dates
+state: ready-to-implement
 createdAt: 2026-06-25T16:35:56.708Z
-updatedAt: 2026-07-31T21:48:38.058Z
+updatedAt: 2026-07-31T23:59:17.911Z
 ---
 
-# Refine dotty cleanup task retirement
+# Add advisory cleanup retirement dates
 
 ## Plan
 
 ## Objective
 
-Decide the smallest honest cleanup-retirement workflow from current local-only receipt semantics, and fix only concrete operational defects found along that path.
+Let cleanup authors declare when a completed task should start prompting for source-repo retirement, without changing cleanup execution, claiming cross-machine completion, or mutating managed repos during `dotty update`.
 
-## Verified current contract
+## Verified current behavior
 
-Cleanup tasks are tracked under `.dotty/cleanups/`; successful and failed attempts write local receipts under `~/.dotty/cleanups/<repo>/<cleanup-id>/`. Dotty cannot infer completion on other machines or in unknown downstream layers. Removing tracked cleanup tasks therefore remains an explicit source-repo decision.
+- Cleanup definitions live under each managed repo's `.dotty/cleanups/` directory.
+- Directory-shaped tasks may define supported metadata in `.dotty/cleanups/<id>/config`; simple executable-file tasks have no metadata surface.
+- Receipts live under `~/.dotty/cleanups/<repo>/<cleanup-id>/` and are keyed by repo name and cleanup id.
+- Only `done` and `failed` affect runtime status. The absolute `source` path and `completed-at` timestamp are diagnostic metadata with no consumers.
+- `dotty cleanups` lists applicable tasks as `pending`, `done`, or `failed`; `--pending` hides non-pending tasks and `--all` includes non-applicable tasks.
+- Dotty has no shared ledger of every machine, environment, or downstream layer that may consume a cleanup.
+- A client-side deletion during `dotty update` would only dirty each local managed checkout. It would not propagate retirement without a separate commit and push, and could interfere with later pulls.
 
-Current receipts store an absolute script path as diagnostic metadata. A checkout-path migration can make that metadata stale, but execution and completion checks are keyed by repo name and cleanup id, so the stale `source` value does not invalidate a completed receipt.
+## Design decision
 
-## Concrete observed friction
+Add one optional supported metadata field for directory-shaped tasks:
 
-- completed task definitions accumulate because there is no visible retirement prompt;
-- deleting one task left an empty untracked task directory in a checkout, which Dotty correctly reported as malformed until the directory was removed;
-- receipt `source` metadata retained an obsolete absolute checkout path after a registry migration.
+```bash
+DOTTY_CLEANUP_RETIRE_AFTER="2026-09-01"
+```
 
-## Investigation contract
+The value is an advisory UTC calendar date in strict `YYYY-MM-DD` form. A cleanup becomes retirement-due when the current UTC date is strictly later than the configured date. On the configured date itself, it is not yet due.
 
-Start with a design and fixture pass; do not assume a new command or metadata field is needed.
+The field means: “After this date, prompt the maintainer to consider removing this task definition once it is locally complete.” It does not mean every possible machine ran the cleanup, and it does not disable or delete the task.
 
-- Reproduce retirement of a completed directory-shaped task in a temporary repo and distinguish Git/untracked-directory behavior from Dotty linking behavior.
-- Verify whether any command consumes receipt `source`; if it remains diagnostic-only, do not add migration or fallback parsing for old absolute values.
-- Compare two minimal options: clearer docs for explicit task removal, or one local-only `dotty cleanups` indication that a completed tracked task is a retirement candidate.
-- Reject any design that claims cross-machine completion, auto-deletes tracked source, mutates a managed repo, or introduces configurable aging without demonstrated need.
-- Prefer no core feature if the empty directory is external checkout residue and local receipt metadata has no behavioral effect.
+Do not infer retirement dates from cleanup ids, file timestamps, receipt `completed-at`, or a global default. Tasks without `DOTTY_CLEANUP_RETIRE_AFTER` retain their current behavior.
 
-## Exit criteria
+## Runtime behavior
 
-Either complete this plan with a documented no-change decision, or revise it into one implementation contract that names the exact command/output change, metadata semantics, focused Bats fixtures, and README/help/completion updates required.
+Retirement metadata must not change execution:
+
+- a pending applicable cleanup still runs during `install` or `update`, even after its retirement date;
+- a failed cleanup still retries normally after its retirement date;
+- a future or overdue retirement date is not exported to the cleanup script and does not change receipt state;
+- Dotty never deletes, edits, commits, or pushes cleanup definitions automatically.
+
+Invalid retirement metadata follows the existing invalid-config contract: Dotty reports the config error, does not execute that task, and `dotty doctor` fails for it. This keeps one config-validation path rather than treating the same file differently across commands.
+
+## Status behavior
+
+For an applicable task whose local receipt status is `done` and whose retirement date has passed, `dotty cleanups` renders:
+
+```text
+  retire  2026-remove-old-tool  Remove old tool state (after 2026-09-01)
+```
+
+All other statuses remain unchanged:
+
+- overdue `pending` tasks remain `pending` so the next update still runs them;
+- overdue `failed` tasks remain `failed` so the failure is not mistaken for retirement eligibility;
+- future-dated completed tasks remain `done`;
+- completed tasks without retirement metadata remain `done`;
+- non-applicable tasks shown through `--all` remain `not applicable`.
+
+`--pending` continues to show only `pending` tasks, so it excludes `retire` rows. Multiple retirement-due tasks across layered repos produce one footer after all repo groups:
+
+> Retirement dates are advisory and completion is local. Remove retire-marked tasks from their repo when you accept that other machines may not have run them.
+
+If no `retire` row is rendered, the footer is absent.
+
+## Implementation scope
+
+1. Extend cleanup config reset and allow-list handling with scalar `DOTTY_CLEANUP_RETIRE_AFTER`, defaulting to an empty string.
+2. Add a focused Bash helper that validates a real `YYYY-MM-DD` calendar date, including month length and leap years, without GNU- or BSD-specific date parsing.
+3. Compare valid dates lexicographically after obtaining the current UTC date once with `date -u '+%Y-%m-%d'`. Fixed-width ISO dates make chronological and lexical order equivalent under `LC_ALL=C`.
+4. Keep `run_pending_cleanups()` behavior unchanged apart from shared validation of the new supported metadata.
+5. In `cmd_cleanups()`, change only locally `done`, applicable, overdue rows to `retire`, append the configured date, and emit the advisory footer once when at least one such row was rendered.
+6. Keep existing grouping, filters, exit behavior, and `No cleanup tasks found.` output unchanged.
+7. Update the `cleanups` descriptions in `cmd_help()` and `completions/_dotty` to mention retirement guidance.
+8. Update the command and one-shot cleanup sections of `README.md` with the field, UTC boundary, advisory semantics, directory-task requirement, example output, and explicit manual commit workflow.
+9. Keep `.github/ISSUE_TEMPLATE/` and `examples/` unchanged unless implementation inspection finds an existing cleanup metadata example that must remain synchronized.
+
+## Test contract
+
+Add focused coverage in `test/cleanups.bats` for:
+
+- a valid leap-day date is accepted and a non-calendar date is rejected by the shared config validation;
+- a locally completed task with a past retirement date renders `retire` and its date;
+- a completed task dated today or in the future remains `done`;
+- an overdue pending task remains `pending` and still executes during `update`;
+- an overdue failed task remains `failed`;
+- completed tasks without the field remain `done`;
+- `--pending` excludes `retire` rows;
+- multiple overdue completed tasks across repos produce one advisory footer;
+- non-applicable tasks remain `not applicable` under `--all`.
+
+Use dates derived from the current UTC day for the boundary assertion and fixed distant past/future dates where exact-day behavior is irrelevant. Do not add a clock override or production-only testing knob.
+
+## Explicit non-goals
+
+- Do not automatically remove cleanup definitions during `install`, `update`, or status commands.
+- Do not add a prune command, `--retirable` filter, aging window, owner field, target ledger, or shared receipt service.
+- Do not skip pending or failed tasks after the retirement date.
+- Do not retrofit existing tasks by parsing dates from their ids.
+- Do not migrate, normalize, validate, or repair receipt `source` paths.
+- Do not change receipt keys or completion semantics.
+- Do not clean up empty task directories; normal Git retirement already removes tracked empty task directories, and `dotty doctor` diagnoses untracked residue.
+
+## Acceptance criteria
+
+- Directory cleanup configs accept an optional, valid `DOTTY_CLEANUP_RETIRE_AFTER` date and reject invalid calendar dates with a useful config error.
+- Only locally completed, applicable tasks past that date render as `retire`.
+- Date metadata never prevents a valid pending task from running merely because the date passed.
+- Dotty performs no cleanup-definition mutation.
+- Status output explains the local/advisory boundary exactly once when retirement-due rows are present.
+- Help, zsh completions, README, implementation, and focused tests describe the same contract.
+- Focused and full validation pass.
+
+## Verification
+
+- Run `bash -n dotty`.
+- Run `./test/bats/bin/bats test/cleanups.bats` while iterating.
+- Run `./test/bats/bin/bats test/` before completion.
+- In a temporary two-repo chain, create past-, current-, future-, pending-, failed-, and non-applicable fixtures; verify rendered statuses, one advisory footer, and unchanged pending execution.
+- Confirm the temporary managed repos remain clean after `dotty cleanups` and `dotty update`.
+
+## Stopping points and exception criteria
+
+- Stop and revisit the contract if implementation requires persistent retirement state, a clock override, GNU/BSD date branching, or source-repo mutation.
+- If portable full calendar validation becomes materially larger than the feature, narrow validation to strict shape plus month/day ranges and document the remaining limit rather than importing a date dependency.
+- Do not broaden the change into cross-machine inventory or repository automation. Upstream bots that commit or open retirement PRs are a separate adoption layer, not Dotty client behavior.
+
+## Follow-up boundary
+
+Existing cleanup tasks will not gain retirement dates automatically. Adding `DOTTY_CLEANUP_RETIRE_AFTER` to tasks in downstream dotfiles repos is separate owning-repo work after this Dotty behavior is implemented and released.
+
+## Next honest step
+
+After explicit approval and a `ready-to-implement` transition, implement the advisory retirement-date metadata, status rendering, validation, docs, and focused tests as one change.
 
 ## Agent handoff
 
-Related prior plan: `2026-06-24-design-dotty-one-shot-cleanup-tasks`.
-
-Problem:
-Dotty cleanup tasks currently run once per applicable local machine and record local receipts under `~/.dotty/cleanups/<repo>/<cleanup-id>/`. The repo task files remain tracked until someone manually removes them later. That matches the current docs, but temporary cleanup tasks can accumulate because there is no reminder, retirement workflow, or useful summary of when a cleanup is safe to delete.
-
-Context:
-- Dotfiles repos may be layered and run on different machines and environments.
-- An earlier layer cannot directly know every later layer or machine that uses it.
-- Cleanup configs already support `DOTTY_CLEANUP_ENVIRONMENTS` and `DOTTY_CLEANUP_MACHINES`, but receipts are local-only.
-- Auto-deleting tracked cleanup files during `dotty update` is probably the wrong shape because it mutates repos locally and cannot prove global completion.
-
-Explore a refinement that avoids persisting cleanup tasks forever without pretending local state is global truth.
-
-Possible directions:
-- Add a `dotty cleanups --retirable` or similar report for tasks that are done locally and have aged past a configurable window.
-- Add metadata such as an intended retirement date/window, owner note, or target scope.
-- Make `dotty doctor` or `dotty cleanups` warn about old completed cleanup tasks still tracked in the repo.
-- Preserve explicit human removal through a follow-up commit, but make the prompt visible and low-friction.
-- Consider whether machine-scoped cleanups can provide stronger local guarantees than environment-scoped cleanups.
-
-Additional observed cleanup-retirement friction from a checkout consolidation:
-
-- A deleted/retired cleanup task left an empty untracked directory at `.dotty/cleanups/2026-06-remove-legacy-gsd-core` in one checkout.
-- `dotty update` treated that empty directory as a malformed cleanup and exited nonzero until the empty directory was removed.
-- Existing local cleanup receipt `source` files stored absolute paths into the old registered checkout, so changing the registered checkout path made receipt metadata stale. Manual repair updated those local receipt paths after the visible checkout became the registered base repo.
-
-This reinforces the existing plan's need for a clearer cleanup retirement workflow and diagnostics. It may also be worth deciding whether local receipt metadata should store repo-relative cleanup paths, tolerate missing sources for completed receipts, or offer a repair command after registered checkout path changes.
-
-Acceptance criteria:
-- The design is explicit about what dotty can and cannot know across machines and layered repos.
-- The workflow helps remove stale tracked cleanup files without unsafe auto-mutation.
-- README docs and tests cover the selected behavior.
+The user explicitly approved the persisted advisory retirement-date contract. The plan is now `ready-to-implement`. It specifies optional `DOTTY_CLEANUP_RETIRE_AFTER="YYYY-MM-DD"` metadata, UTC advisory status rendering, unchanged pending/failed execution, no automatic repo mutation, portable calendar validation, synchronized docs/help/completions, and focused Bats coverage. No implementation, commit, or push has occurred. The next authorized workflow is `$jp:implement` or another explicit implementation request.
