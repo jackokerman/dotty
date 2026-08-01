@@ -3,7 +3,7 @@ id: 2026-06-25-refine-dotty-cleanup-task-retirement
 title: Add advisory cleanup retirement dates
 state: ready-to-implement
 createdAt: 2026-06-25T16:35:56.708Z
-updatedAt: 2026-07-31T23:59:17.911Z
+updatedAt: 2026-08-01T00:10:18.760Z
 ---
 
 # Add advisory cleanup retirement dates
@@ -139,8 +139,8 @@ Existing cleanup tasks will not gain retirement dates automatically. Adding `DOT
 
 ## Next honest step
 
-After explicit approval and a `ready-to-implement` transition, implement the advisory retirement-date metadata, status rendering, validation, docs, and focused tests as one change.
+Use `$jp:implement` or another explicit implementation request to implement the advisory retirement-date metadata, status rendering, validation, docs, and focused tests as one change.
 
 ## Agent handoff
 
-The user explicitly approved the persisted advisory retirement-date contract. The plan is now `ready-to-implement`. It specifies optional `DOTTY_CLEANUP_RETIRE_AFTER="YYYY-MM-DD"` metadata, UTC advisory status rendering, unchanged pending/failed execution, no automatic repo mutation, portable calendar validation, synchronized docs/help/completions, and focused Bats coverage. No implementation, commit, or push has occurred. The next authorized workflow is `$jp:implement` or another explicit implementation request.
+The advisory retirement-date contract is approved, `ready-to-implement`, and persisted on `main`. It specifies optional `DOTTY_CLEANUP_RETIRE_AFTER="YYYY-MM-DD"` metadata, UTC advisory status rendering, unchanged pending/failed execution, no automatic repo mutation, portable calendar validation, synchronized docs/help/completions, and focused Bats coverage. No implementation has started. The next authorized workflow is `$jp:implement` or another explicit implementation request.
