@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-DOTTY_VERSION="0.3.0"
+DOTTY_VERSION="0.4.0"
 DOTTY_DIR="${DOTTY_DIR:-$HOME/.dotty}"
 DOTTY_REGISTRY="$DOTTY_DIR/registry"
 DOTTY_REPOS_DIR="$DOTTY_DIR/repos"
