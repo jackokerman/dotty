@@ -13,6 +13,7 @@
 - `hooks/pre-commit` is the guard hook template installed by `dotty guard`; it delegates to `dotty guard-check` at commit time.
 - `completions/_dotty` contains zsh completions.
 - `.github/ISSUE_TEMPLATE/` contains the GitHub issue forms for bug reports and feature requests.
+- `docs/releases/` contains the checked-in notes used for GitHub releases.
 - `examples/` contains contributor-facing sample dotfiles layouts referenced from the docs and issue forms.
 - `.dotty/commands/` in managed repos is the source of repo-defined `dotty run` commands.
 - `.dotty/cleanups/` in managed repos is the source of one-shot cleanup tasks that run during `install` and `update`.
@@ -49,6 +50,7 @@
 - For risky symlink or chain-resolution changes, test with a temporary repo before checking a real dotfiles setup.
 - For shared-state locking or serialization changes, also run a real mutating command smoke test and assert the lock or state artifact is cleaned up afterward.
 - When a change affects live linking or hooks, use `./dotty status` or `~/.dotty/registry` to discover the local chain, then run the smallest real command needed to validate it.
+- Use Conventional Commit subjects. User-visible `feat:`, `fix:`, and breaking `!` commits drive semantic version decisions in `RELEASING.md`.
 
 ## Keep Docs In Sync
 

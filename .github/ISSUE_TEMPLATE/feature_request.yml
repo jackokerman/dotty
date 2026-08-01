@@ -53,7 +53,7 @@ body:
     attributes:
       label: Before submitting
       options:
-        - label: "I checked `ROADMAP.md`, including the `Not now` section."
+        - label: "I checked existing issues for related requests and workarounds."
           required: true
         - label: "I read `README.md` and `CONTRIBUTING.md` first."
           required: true

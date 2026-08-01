@@ -1,5 +1,8 @@
 # ·· dotty ··
 
+[![CI](https://github.com/jackokerman/dotty/actions/workflows/ci.yml/badge.svg)](https://github.com/jackokerman/dotty/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/jackokerman/dotty)](https://github.com/jackokerman/dotty/releases/latest)
+
 A dotfiles manager written in bash, with no dependencies beyond `bash` and `git`.
 
 Dotty is for people who want layered dotfiles without hiding everything behind a template system. You keep a base repo for personal config, add one or more overlay repos for work or team-specific changes, and let later repos win on conflicts. Inside each repo, you can still add environment-specific overlays when the same setup needs to behave differently on a laptop and a remote box.
@@ -20,7 +23,7 @@ The core model is opinionated and small:
 - Optional environment overlays via `$env/home/`.
 - Debugging commands like `dotty status`, `dotty files`, `dotty trace`, and `dotty doctor`.
 
-## Personal + Work Example
+## Personal + work example
 
 Here is the most common shape that dotty is built for:
 
@@ -104,6 +107,19 @@ dotty install https://github.com/you/dotfiles.git
 ```
 
 If your repo declares dependencies via `DOTTY_EXTENDS`, dotty resolves the full chain, clones anything missing, symlinks everything into `$HOME`, and runs install hooks.
+
+### Removing dotty
+
+Before removing dotty itself, run `dotty status` and use `dotty uninstall <name>` for each managed repo whose symlinks and backups you want dotty to clean up.
+
+The installer adds these lines to `.bashrc` or `.zshrc`:
+
+```bash
+export PATH="$HOME/.dotty/bin:$PATH"
+eval "$(dotty shell-init)"
+```
+
+Remove those lines from the shell startup file that the installer reported. Then remove the `_dotty` completion symlink under `${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions/` if it still points into your dotty installation. Finally, delete `${DOTTY_DIR:-$HOME/.dotty}` after confirming that you no longer need its registry, managed repo clones, or backups.
 
 ## Setting up your dotfiles repo
 
@@ -623,7 +639,7 @@ rm -f "$HOME/.local/bin/old-tool"
 
 After `dotty cleanups` marks a task `retire`, decide whether its local completion is sufficient for the machines you maintain. Remove the cleanup definition from its source repo manually, then commit and push that removal through the repo's normal workflow. Machines that never ran the task will not run it after the definition is removed.
 
-## Repo-Defined Commands
+## Repo-defined commands
 
 If a repo has executable files under `.dotty/commands/`, dotty exposes them through `dotty run <name>`.
 
@@ -784,6 +800,8 @@ Each test gets a fully isolated environment with a temporary `$HOME`, registry, 
 - `symlinks.bats` — symlink creation, directory merging, orphan cleanup
 - `chain.bats` — chain resolution, cycle detection, environment detection
 - `dry_run.bats` — dry-run mode
+- `environments.bats` — environment detection and overlay behavior
+- `guard.bats` — public-content guard checks and hook installation
 - `install.bats` — installer behavior for existing `~/.dotty` state
 - `operation_lock.bats` — mutating command serialization and stale lock cleanup
 - `update_parallel.bats` — opt-in parallel update pull scheduling
@@ -831,3 +849,7 @@ add-zsh-hook precmd __dotty_check
 ```
 
 The hook defers to `precmd` so it doesn't block p10k instant prompt, and the one-shot guard ensures it only runs once per session.
+
+## License
+
+Dotty is available under the [MIT License](LICENSE).

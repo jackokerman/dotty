@@ -25,6 +25,17 @@ While iterating, run the smallest relevant bats file first, then rerun the full 
 - Keep GNU/BSD portability in mind for small utilities like `sed` and `stat`.
 - Add comments only when they explain non-obvious behavior.
 
+## Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) so release history stays scannable and version decisions remain mechanical.
+
+- `feat:` introduces user-visible behavior and normally warrants a minor release.
+- `fix:` corrects user-visible behavior and normally warrants a patch release.
+- `feat!:` or another type with `!` marks a breaking change and warrants a major release.
+- `docs:`, `refactor:`, `perf:`, `test:`, and `chore:` describe changes that do not determine a release on their own.
+
+Keep the subject concise and imperative, for example `fix: preserve registry order when updating entries`.
+
 ## Keep behavior and docs aligned
 
 If dotty behavior changes, update the same change set:
@@ -48,4 +59,4 @@ If you need a concrete minimal layout, start from `examples/personal-dotfiles/` 
 
 ## Releases
 
-Release mechanics live in `RELEASING.md`.
+Release mechanics live in `RELEASING.md`. Releases are currently cut manually from the conventional commits since the previous tag.
