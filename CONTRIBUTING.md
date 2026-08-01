@@ -32,7 +32,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) so release hist
 - `feat:` introduces user-visible behavior and normally warrants a minor release.
 - `fix:` corrects user-visible behavior and normally warrants a patch release.
 - `feat!:` or another type with `!` marks a breaking change and warrants a major release.
-- `docs:`, `refactor:`, `perf:`, `test:`, and `chore:` describe changes that do not determine a release on their own.
+- `docs:`, `refactor:`, `perf:`, `test:`, `ci:`, and `chore:` describe changes that do not determine a release on their own.
 
 Keep the subject concise and imperative, for example `fix: preserve registry order when updating entries`.
 
