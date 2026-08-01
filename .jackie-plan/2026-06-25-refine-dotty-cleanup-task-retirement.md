@@ -3,7 +3,7 @@ id: 2026-06-25-refine-dotty-cleanup-task-retirement
 title: Add advisory cleanup retirement dates
 state: complete
 createdAt: 2026-06-25T16:35:56.708Z
-updatedAt: 2026-08-01T00:19:33.927Z
+updatedAt: 2026-08-01T00:22:39.284Z
 ---
 
 # Add advisory cleanup retirement dates
@@ -143,11 +143,9 @@ Use `$jp:implement` or another explicit implementation request to implement the 
 
 ## Agent handoff
 
-Implemented advisory cleanup retirement dates through the review boundary.
+Implementation approved and shipped.
 
-- Added strict portable calendar validation and scalar `DOTTY_CLEANUP_RETIRE_AFTER` config handling.
-- Kept retirement metadata out of cleanup script environments and left pending/failed execution unchanged.
-- Rendered only overdue, applicable, locally completed tasks as `retire`, with one advisory footer.
-- Updated CLI help, zsh completion text, README guidance, and focused Bats coverage.
-- Verification passed: `bash -n dotty`, focused `test/cleanups.bats`, full `test/`, and `git diff --check`.
-- Current state is code-complete but unreviewed. Next step is user review; do not commit, push, or transition lifecycle state without explicit approval.
+- Plan lifecycle state is `complete`.
+- Commit `1f81aef` (`feat: add advisory cleanup retirement dates`) is pushed to `origin/main`.
+- Focused and full Bats verification passed before shipping.
+- No implementation or review work remains. The plan is intentionally not archived pending separate explicit approval.
